@@ -1,0 +1,59 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: dreamforge
+      POSTGRES_PASSWORD: dreamforge
+      POSTGRES_DB: dreamforge
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dreamforge"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://dreamforge:dreamforge@postgres:5432/dreamforge
+      DREAMFORGE_MODE: ${DREAMFORGE_MODE:-demo}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://models.inference.ai.azure.com}
+      AI_MODEL: ${AI_MODEL:-gpt-4o-mini}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      AZURE_TENANT_ID: ${AZURE_TENANT_ID:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000/api/v1
+      NEXT_PUBLIC_AZURE_CLIENT_ID: ${NEXT_PUBLIC_AZURE_CLIENT_ID:-}
+      NEXT_PUBLIC_AZURE_TENANT_ID: ${NEXT_PUBLIC_AZURE_TENANT_ID:-}
+      DREAMFORGE_MODE: ${DREAMFORGE_MODE:-demo}
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+    command: npm run dev
+
+volumes:
+  pgdata:

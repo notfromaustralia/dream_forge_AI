@@ -1,0 +1,36 @@
+# Dependencies
+node_modules/
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Build
+.next/
+dist/
+build/
+*.egg-info/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.idea/
+.vscode/settings.json
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Python
+.pytest_cache/
+.coverage
+htmlcov/
+alembic/versions/*.pyc
+
+# Logs
+*.log
+npm-debug.log*
