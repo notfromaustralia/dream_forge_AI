@@ -1,4 +1,4 @@
-import type { ParsedStory } from "./story-parser";
+import type { ParsedContent, ParsedQuest, ParsedStory, ParsedDialogue, ParsedPlain } from "./story-parser";
 
 function encodePollinations(prompt: string, seed: string, width: number, height: number): string {
   const encoded = encodeURIComponent(prompt.slice(0, 800));
@@ -17,43 +17,53 @@ export function dicebearAvatarUrl(seed: string): string {
   return `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(seed)}&backgroundColor=0a0a1a`;
 }
 
-export function questScenePrompt(parsed: Extract<ParsedStory, { kind: "quest" }>): string {
-  const locations = parsed.locations.slice(0, +2).join(", ");
-  const enemies = parsed.enemies?.slice(0, 2).map((e) => e.name).join(", ");
-  const parts = [
+function questPrompt(parsed: ParsedQuest): string {
+  const locations = parsed.locations.slice(0, 2).join(", ");
+  const obstacles = parsed.obstacles.slice(0, 2).map((o) => o.name).join(", ");
+  return [
     "dark fantasy cinematic wide shot",
     parsed.title,
-    parsed.description.slice(0, 120),
+    parsed.synopsis.slice(0, 120),
     locations ? `setting: ${locations}` : "",
-    enemies ? `threat: ${enemies}` : "",
+    obstacles ? `threat: ${obstacles}` : "",
     "atmospheric, no text, no watermark",
-  ].filter(Boolean);
-  return parts.join(", ");
+  ].filter(Boolean).join(", ");
 }
 
-export function narrativeScenePrompt(parsed: Extract<ParsedStory, { kind: "narrative" }>): string {
-  const setting = parsed.setting.world || parsed.setting.location || "";
-  const conflict = parsed.plot.conflict?.slice(0, 100) || "";
-  const parts = [
+function storyPrompt(parsed: ParsedStory): string {
+  const beat = parsed.beats.find((b) => /conflict|climax/i.test(b.label))?.text || parsed.beats[0]?.text || "";
+  return [
     "cinematic fantasy landscape",
-    setting,
-    conflict,
+    parsed.setting,
+    parsed.title,
+    beat.slice(0, 100),
     "dramatic lighting, wide shot, no text",
-  ].filter(Boolean);
-  return parts.join(", ");
+  ].filter(Boolean).join(", ");
 }
 
-export function plainScenePrompt(parsed: Extract<ParsedStory, { kind: "plain" }>): string {
+function dialoguePrompt(parsed: ParsedDialogue): string {
+  return [
+    "cinematic character scene",
+    parsed.setting,
+    parsed.title,
+    parsed.characters.slice(0, 2).map((c) => c.name).join(" and "),
+    "intimate framing, dramatic lighting, no text",
+  ].filter(Boolean).join(", ");
+}
+
+function plainPrompt(parsed: ParsedPlain): string {
   return `fantasy scene, ${parsed.title}, ${parsed.text.slice(0, 150)}, cinematic, no text`;
 }
 
-export function storyBannerPrompt(parsed: ParsedStory): string {
+export function storyBannerPrompt(parsed: ParsedContent): string {
   switch (parsed.kind) {
     case "quest":
-      return questScenePrompt(parsed);
-    case "narrative":
-      return narrativeScenePrompt(parsed);
+      return questPrompt(parsed);
+    case "story":
+      return storyPrompt(parsed);
+    case "dialogue":
+      return dialoguePrompt(parsed);
     default:
-      return plainScenePrompt(parsed);
+      return plainPrompt(parsed);
   }
 }

@@ -35,6 +35,8 @@ from app.schemas.universe import (
     GenerateCharacterRequest,
     GenerateDialogueRequest,
     GenerateQuestRequest,
+    GenreSuggestRequest,
+    GenreSuggestResponse,
     GraphEdgeCreate,
     GraphResponse,
     SearchRequest,
@@ -48,6 +50,10 @@ from app.schemas.universe import (
     UniverseUpdate,
 )
 from app.services.embeddings import EmbeddingService
+from app.services.suggester import suggest_genre as suggest_genre_service
+
+# Genres mirror the buttons in frontend/app/universe/new/page.tsx
+SUPPORTED_GENRES = ["fantasy", "sci-fi", "cyberpunk", "horror", "solarpunk", "dark fantasy"]
 
 router = APIRouter(prefix="/universes", tags=["universes"])
 

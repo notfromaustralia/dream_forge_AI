@@ -1,33 +1,47 @@
-export type QuestEnemy = {
-  name: string;
-  type?: string;
-  difficulty?: string;
-  count?: number;
-};
+/**
+ * Story content parser.
+ *
+ * The backend now emits one of three shapes inside Story.content_json,
+ * tagged by a `kind` discriminator. This parser is intentionally thin:
+ * the backend has already normalized the LLM output, so we just read it.
+ *
+ * Legacy rows (created before the schema lockdown) may have a different
+ * shape — those fall back to a generic plain rendering.
+ */
+
+export type StoryBeat = { label: string; text: string };
+export type StoryCharacter = { name: string; role?: string };
+export type Obstacle = { name: string; description: string };
+export type DialogueLine = { character: string; line: string };
 
 export type ParsedQuest = {
   kind: "quest";
   title: string;
-  description: string;
-  objectives: string[];
-  locations: string[];
-  rewards: string[];
+  synopsis: string;
   questGiver: string;
-  enemies?: QuestEnemy[];
+  objectives: string[];
+  obstacles: Obstacle[];
+  rewards: string[];
+  locations: string[];
 };
 
-export type ParsedNarrative = {
-  kind: "narrative";
+export type ParsedStory = {
+  kind: "story";
   title: string;
-  setting: { world?: string; location?: string; era?: string };
-  characters: { name: string; role?: string }[];
-  plot: {
-    introduction?: string;
-    conflict?: string;
-    climax?: string;
-    resolution?: string;
-  };
-  dialogue?: { character: string; line: string }[];
+  synopsis: string;
+  setting: string;
+  characters: StoryCharacter[];
+  beats: StoryBeat[];
+  themes: string[];
+};
+
+export type ParsedDialogue = {
+  kind: "dialogue";
+  title: string;
+  synopsis: string;
+  setting: string;
+  characters: StoryCharacter[];
+  lines: DialogueLine[];
 };
 
 export type ParsedPlain = {
@@ -36,157 +50,139 @@ export type ParsedPlain = {
   text: string;
 };
 
-export type ParsedStory = ParsedQuest | ParsedNarrative | ParsedPlain;
+export type ParsedContent = ParsedQuest | ParsedStory | ParsedDialogue | ParsedPlain;
 
-function asStringArray(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  return value.map((v) => (typeof v === "string" ? v : String(v))).filter(Boolean);
+function str(v: unknown, fallback = ""): string {
+  return typeof v === "string" && v.trim() ? v.trim() : fallback;
 }
 
-function parseQuestObject(quest: Record<string, unknown>, fallbackTitle: string): ParsedQuest {
-  const rewardsRaw = quest.rewards;
-  let rewards: string[] = [];
-  if (Array.isArray(rewardsRaw)) {
-    rewards = rewardsRaw.map((r) =>
-      typeof r === "string" ? r : typeof r === "object" && r && "item" in r ? String((r as { item: string }).item) : String(r)
-    );
-  } else if (typeof rewardsRaw === "object" && rewardsRaw) {
-    const obj = rewardsRaw as Record<string, unknown>;
-    if (obj.gold) rewards.push(`${obj.gold} gold`);
-    if (Array.isArray(obj.items)) rewards.push(...asStringArray(obj.items));
+function strArr(v: unknown): string[] {
+  if (!Array.isArray(v)) return [];
+  return v
+    .map((item) => {
+      if (typeof item === "string") return item.trim();
+      if (item && typeof item === "object") {
+        const obj = item as Record<string, unknown>;
+        return str(obj.description) || str(obj.text) || str(obj.name);
+      }
+      return "";
+    })
+    .filter(Boolean);
+}
+
+function charArr(v: unknown): StoryCharacter[] {
+  if (!Array.isArray(v)) return [];
+  const out: StoryCharacter[] = [];
+  for (const item of v) {
+    if (!item || typeof item !== "object") continue;
+    const obj = item as Record<string, unknown>;
+    const name = str(obj.name);
+    if (!name) continue;
+    const role = str(obj.role);
+    out.push(role ? { name, role } : { name });
   }
-
-  const enemiesRaw = quest.enemies;
-  let enemies: QuestEnemy[] | undefined;
-  if (Array.isArray(enemiesRaw)) {
-    enemies = enemiesRaw.map((e) => {
-      if (typeof e === "string") return { name: e };
-      const obj = e as Record<string, unknown>;
-      return {
-        name: String(obj.name ?? "Unknown"),
-        type: obj.type ? String(obj.type) : undefined,
-        difficulty: obj.difficulty ? String(obj.difficulty) : undefined,
-        count: typeof obj.count === "number" ? obj.count : undefined,
-      };
-    });
-  }
-
-  const questGiver = quest.quest_giver ?? quest.questGiver ?? quest.giver;
-  return {
-    kind: "quest",
-    title: String(quest.title ?? fallbackTitle),
-    description: String(quest.description ?? ""),
-    objectives: asStringArray(quest.objectives),
-    locations: asStringArray(quest.locations),
-    rewards,
-    questGiver: typeof questGiver === "string" ? questGiver : "",
-    enemies,
-  };
+  return out;
 }
 
-function parseNarrativeObject(data: Record<string, unknown>, fallbackTitle: string): ParsedNarrative {
-  const settingRaw = data.setting;
-  const setting =
-    typeof settingRaw === "object" && settingRaw
-      ? {
-          world: (settingRaw as Record<string, unknown>).world
-            ? String((settingRaw as Record<string, unknown>).world)
-            : undefined,
-          location: (settingRaw as Record<string, unknown>).location
-            ? String((settingRaw as Record<string, unknown>).location)
-            : undefined,
-          era: (settingRaw as Record<string, unknown>).era
-            ? String((settingRaw as Record<string, unknown>).era)
-            : undefined,
-        }
-      : {};
-
-  const charsRaw = data.characters;
-  const characters = Array.isArray(charsRaw)
-    ? charsRaw.map((c) => {
-        if (typeof c === "string") return { name: c };
-        const obj = c as Record<string, unknown>;
-        return { name: String(obj.name ?? "Unknown"), role: obj.role ? String(obj.role) : undefined };
-      })
-    : [];
-
-  const plotRaw = data.plot;
-  const plot =
-    typeof plotRaw === "object" && plotRaw
-      ? {
-          introduction: (plotRaw as Record<string, unknown>).introduction
-            ? String((plotRaw as Record<string, unknown>).introduction)
-            : undefined,
-          conflict: (plotRaw as Record<string, unknown>).conflict
-            ? String((plotRaw as Record<string, unknown>).conflict)
-            : undefined,
-          climax: (plotRaw as Record<string, unknown>).climax
-            ? String((plotRaw as Record<string, unknown>).climax)
-            : undefined,
-          resolution: (plotRaw as Record<string, unknown>).resolution
-            ? String((plotRaw as Record<string, unknown>).resolution)
-            : undefined,
-        }
-      : {};
-
-  const dialogueRaw = data.dialogue;
-  const dialogue = Array.isArray(dialogueRaw)
-    ? dialogueRaw.map((d) => {
-        const obj = d as Record<string, unknown>;
-        return {
-          character: String(obj.character ?? obj.speaker ?? "Unknown"),
-          line: String(obj.line ?? obj.text ?? ""),
-        };
-      })
-    : undefined;
-
-  return {
-    kind: "narrative",
-    title: String(data.title ?? fallbackTitle),
-    setting,
-    characters,
-    plot,
-    dialogue,
-  };
+function obstacleArr(v: unknown): Obstacle[] {
+  if (!Array.isArray(v)) return [];
+  return v
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const obj = item as Record<string, unknown>;
+      return { name: str(obj.name, "Unknown"), description: str(obj.description) };
+    })
+    .filter((o): o is Obstacle => o !== null);
 }
 
-function tryParseJson(text: string): Record<string, unknown> | null {
+function beatArr(v: unknown): StoryBeat[] {
+  if (!Array.isArray(v)) return [];
+  return v
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const obj = item as Record<string, unknown>;
+      const text = str(obj.text);
+      const label = str(obj.label);
+      if (!text && !label) return null;
+      return { label, text };
+    })
+    .filter((b): b is StoryBeat => b !== null);
+}
+
+function dialogueArr(v: unknown): DialogueLine[] {
+  if (!Array.isArray(v)) return [];
+  return v
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const obj = item as Record<string, unknown>;
+      const line = str(obj.line) || str(obj.text);
+      const character = str(obj.character) || str(obj.speaker);
+      if (!line) return null;
+      return { character: character || "Unknown", line };
+    })
+    .filter((d): d is DialogueLine => d !== null);
+}
+
+function tryParse(json: string | undefined): Record<string, unknown> | null {
+  if (!json || json === "{}") return null;
   try {
-    const parsed = JSON.parse(text);
-    return typeof parsed === "object" && parsed !== null ? (parsed as Record<string, unknown>) : null;
+    const parsed = JSON.parse(json);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : null;
   } catch {
     return null;
   }
 }
 
 export function parseStoryContent(
-  title: string,
+  fallbackTitle: string,
   synopsis: string,
-  contentJson?: string
-): ParsedStory {
-  let data: Record<string, unknown> | null = null;
-
-  if (contentJson && contentJson !== "{}") {
-    data = tryParseJson(contentJson);
-  }
+  contentJson?: string,
+): ParsedContent {
+  const data = tryParse(contentJson);
   if (!data) {
-    data = tryParseJson(synopsis);
+    return { kind: "plain", title: fallbackTitle, text: synopsis };
   }
 
-  if (data) {
-    if (data.quest && typeof data.quest === "object") {
-      return parseQuestObject(data.quest as Record<string, unknown>, title);
-    }
-    if ("objectives" in data && ("description" in data || "quest_giver" in data)) {
-      return parseQuestObject(data, title);
-    }
-    if (data.plot || data.setting || data.dialogue) {
-      return parseNarrativeObject(data, title);
-    }
-    if (typeof data.synopsis === "string") {
-      return { kind: "plain", title: String(data.title ?? title), text: data.synopsis };
-    }
+  const kind = str(data.kind);
+  const title = str(data.title, fallbackTitle);
+
+  if (kind === "quest" || ("objectives" in data && "questGiver" in data)) {
+    return {
+      kind: "quest",
+      title,
+      synopsis: str(data.synopsis, synopsis),
+      questGiver: str(data.questGiver) || str(data.quest_giver),
+      objectives: strArr(data.objectives),
+      obstacles: obstacleArr(data.obstacles),
+      rewards: strArr(data.rewards),
+      locations: strArr(data.locations),
+    };
   }
 
-  return { kind: "plain", title, text: synopsis };
+  if (kind === "dialogue" || ("lines" in data && "characters" in data)) {
+    return {
+      kind: "dialogue",
+      title,
+      synopsis: str(data.synopsis, synopsis),
+      setting: str(data.setting),
+      characters: charArr(data.characters),
+      lines: dialogueArr(data.lines || data.dialogue),
+    };
+  }
+
+  if (kind === "story" || "beats" in data) {
+    return {
+      kind: "story",
+      title,
+      synopsis: str(data.synopsis, synopsis),
+      setting: str(data.setting),
+      characters: charArr(data.characters),
+      beats: beatArr(data.beats),
+      themes: strArr(data.themes),
+    };
+  }
+
+  return { kind: "plain", title, text: str(data.synopsis, synopsis) };
 }

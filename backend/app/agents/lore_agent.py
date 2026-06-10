@@ -1,9 +1,13 @@
+import logging
 import uuid
 from typing import Any
 
 from app.agents.base import BaseAgent
 from app.db.models import Event, Faction, Location, MagicSystem, Religion, TimelineEntry
 from app.services.embeddings import EmbeddingService
+from app.services.llm import LLMError, LLMJSONError
+
+logger = logging.getLogger("dreamforge.lore")
 
 
 class LoreAgent(BaseAgent):
@@ -14,11 +18,23 @@ class LoreAgent(BaseAgent):
         prompt = context.get("prompt", "")
         genre = context.get("genre", "fantasy")
 
-        data = await self.llm.complete_json(
-            system_prompt=f"You are a world-building expert. Generate rich {genre} world lore as JSON.",
-            user_prompt=f"Create world lore for: {prompt}. Include overview, locations, factions, religions, magic_systems, events, timeline.",
-            demo_key="universe_lore",
-        )
+        try:
+            data = await self.llm.complete_json(
+                system_prompt=f"You are a world-building expert. Generate concise {genre} world lore as JSON. Be brief: 1-2 sentences per field, max 3 items per array.",
+                user_prompt=f"Create world lore for: {prompt}. Return JSON with: overview, locations(name,type,description), factions(name,ideology,power_level,territory), religions(name,beliefs), magic_systems(name,rules,limitations), events(title,description,era_year,event_type,impact), timeline(era_year,label).",
+            )
+        except (LLMError, LLMJSONError) as exc:
+            logger.exception("lore LLM call failed")
+            return {
+                "error": str(exc),
+                "overview": "",
+                "created": {"locations": [], "factions": [], "events": []},
+                "reasoning": self.reasoning_step(
+                    f"Generating lore for {universe_id}",
+                    "LLM call failed",
+                    str(exc),
+                ),
+            }
 
         embed_svc = EmbeddingService(self.session)
         created: dict[str, list] = {"locations": [], "factions": [], "events": []}

@@ -159,3 +159,13 @@ class GraphEdgeCreate(BaseModel):
     target_id: str
     relationship: str
     strength: float = 0.5
+
+
+class GenreSuggestRequest(BaseModel):
+    prompt: str
+
+
+class GenreSuggestResponse(BaseModel):
+    genre: str
+    reasoning: str
+    alternatives: list[str] = Field(default_factory=list)

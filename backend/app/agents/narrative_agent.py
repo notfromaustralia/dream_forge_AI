@@ -1,10 +1,120 @@
+"""Narrative generation: stories, quests, dialogues."""
+
+from __future__ import annotations
+
+import json
+import logging
 import uuid
 from typing import Any
 
 from app.agents.base import BaseAgent
-from app.agents.story_normalize import normalize_story
+from app.agents.schemas import (
+    DIALOGUE_SCHEMA_INSTRUCTION,
+    QUEST_SCHEMA_INSTRUCTION,
+    STORY_SCHEMA_INSTRUCTION,
+)
 from app.db.models import Story
 from app.services.embeddings import EmbeddingService
+from app.services.llm import LLMError, LLMJSONError
+
+logger = logging.getLogger("dreamforge.narrative")
+
+
+def _trim(value: Any, fallback: str = "Untitled") -> str:
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return fallback
+
+
+def _ensure_string_list(value: Any) -> list[str]:
+    """Flatten the LLM output into plain strings, tolerating object items."""
+    if not isinstance(value, list):
+        return []
+    out: list[str] = []
+    for item in value:
+        if isinstance(item, str) and item.strip():
+            out.append(item.strip())
+        elif isinstance(item, dict):
+            text = (
+                item.get("description")
+                or item.get("text")
+                or item.get("name")
+                or item.get("step")
+            )
+            if isinstance(text, str) and text.strip():
+                out.append(text.strip())
+    return out
+
+
+def _normalize_story(data: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "kind": "story",
+        "title": _trim(data.get("title"), "Untitled Story"),
+        "synopsis": _trim(data.get("synopsis"), ""),
+        "setting": _trim(data.get("setting"), ""),
+        "characters": [
+            {
+                "name": _trim(c.get("name"), "Unknown"),
+                "role": _trim(c.get("role"), ""),
+            }
+            for c in (data.get("characters") or [])
+            if isinstance(c, dict)
+        ],
+        "beats": [
+            {
+                "label": _trim(b.get("label"), ""),
+                "text": _trim(b.get("text"), ""),
+            }
+            for b in (data.get("beats") or [])
+            if isinstance(b, dict) and (b.get("text") or b.get("label"))
+        ],
+        "themes": _ensure_string_list(data.get("themes")),
+    }
+
+
+def _normalize_quest(data: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "kind": "quest",
+        "title": _trim(data.get("title"), "Untitled Quest"),
+        "synopsis": _trim(data.get("synopsis"), ""),
+        "questGiver": _trim(data.get("questGiver") or data.get("quest_giver"), ""),
+        "objectives": _ensure_string_list(data.get("objectives")),
+        "obstacles": [
+            {
+                "name": _trim(o.get("name"), "Unknown"),
+                "description": _trim(o.get("description"), ""),
+            }
+            for o in (data.get("obstacles") or [])
+            if isinstance(o, dict)
+        ],
+        "rewards": _ensure_string_list(data.get("rewards")),
+        "locations": _ensure_string_list(data.get("locations")),
+    }
+
+
+def _normalize_dialogue(data: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "kind": "dialogue",
+        "title": _trim(data.get("title"), "A Scene"),
+        "synopsis": _trim(data.get("synopsis"), ""),
+        "setting": _trim(data.get("setting"), ""),
+        "characters": [
+            {
+                "name": _trim(c.get("name"), "Unknown"),
+                "role": _trim(c.get("role"), ""),
+            }
+            for c in (data.get("characters") or [])
+            if isinstance(c, dict)
+        ],
+        "lines": [
+            {
+                "character": _trim(line.get("character"), "Unknown"),
+                "line": _trim(line.get("line") or line.get("text"), ""),
+            }
+            for line in (data.get("dialogue") or data.get("lines") or [])
+            if isinstance(line, dict)
+        ],
+    }
 
 
 class NarrativeAgent(BaseAgent):
@@ -13,49 +123,76 @@ class NarrativeAgent(BaseAgent):
     async def run(self, context: dict[str, Any]) -> dict[str, Any]:
         universe_id = context["universe_id"]
         intent = context.get("intent", "story")
-        prompt = context.get("prompt", "")
+        user_prompt = context.get("prompt", "")
 
-        demo_keys = {
-            "story": "story",
-            "quest": "quest",
-            "dialogue": "dialogue",
-            "expand_story": "story",
-        }
-        demo_key = demo_keys.get(intent, "story")
+        if intent == "quest":
+            schema = QUEST_SCHEMA_INSTRUCTION
+            normalize = _normalize_quest
+            arc_type = "side"
+            max_tokens = 900
+        elif intent == "dialogue":
+            schema = DIALOGUE_SCHEMA_INSTRUCTION
+            normalize = _normalize_dialogue
+            arc_type = "scene"
+            max_tokens = 900
+        else:
+            schema = STORY_SCHEMA_INSTRUCTION
+            normalize = _normalize_story
+            arc_type = "main"
+            max_tokens = 2200
 
-        data = await self.llm.complete_json(
-            system_prompt="You are a master storyteller. Generate narrative content as JSON.",
-            user_prompt=f"Intent: {intent}. {prompt}",
-            demo_key=demo_key,
+        system_prompt = (
+            "You are a vivid storyteller. Generate narrative content as JSON. "
+            "Write actual prose — scenes, action, and dialogue — not just summaries.\n"
+            + schema
         )
 
-        embed_svc = EmbeddingService(self.session)
-        result: dict[str, Any] = {"data": data}
+        try:
+            raw = await self.llm.complete_json(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt or f"Generate a {intent}.",
+                max_tokens=max_tokens,
+            )
+        except (LLMError, LLMJSONError) as exc:
+            logger.exception("narrative LLM call failed")
+            return {
+                "error": str(exc),
+                "reasoning": self.reasoning_step(
+                    f"Generating {intent}",
+                    "LLM call failed",
+                    str(exc),
+                ),
+            }
 
-        if intent in ("story", "quest", "expand_story"):
-            title, synopsis, content_json, arc_type = normalize_story(data, intent)
-            story_id = f"story_{uuid.uuid4().hex[:12]}"
-            story = Story(
+        story = normalize(raw)
+
+        story_id = f"story_{uuid.uuid4().hex[:12]}"
+        if intent != "dialogue":
+            row = Story(
                 id=story_id,
                 universe_id=universe_id,
-                title=title,
-                synopsis=synopsis,
-                content_json=content_json,
+                title=story["title"],
+                synopsis=story["synopsis"],
+                content_json=json.dumps(story),
                 arc_type=arc_type,
                 status="draft",
             )
-            self.session.add(story)
+            self.session.add(row)
             await self.session.commit()
-            await embed_svc.store_embedding(
-                universe_id, "story", story_id,
-                f"{title}: {synopsis}",
-            )
-            result["story_id"] = story_id
-            result["title"] = title
 
-        result["reasoning"] = self.reasoning_step(
-            f"Generating {intent} for {universe_id}",
-            f"Created narrative content",
-            f"Title: {result.get('title', data.get('title', 'N/A'))}",
-        )
-        return result
+            embed = EmbeddingService(self.session)
+            await embed.store_embedding(
+                universe_id, "story", story_id,
+                f"{story['title']}: {story['synopsis']}",
+            )
+
+        return {
+            "story_id": story_id if intent != "dialogue" else None,
+            "title": story["title"],
+            "data": story,
+            "reasoning": self.reasoning_step(
+                f"Generating {intent} for {universe_id}",
+                f"Normalized {intent} payload",
+                f"Title: {story['title']}",
+            ),
+        }

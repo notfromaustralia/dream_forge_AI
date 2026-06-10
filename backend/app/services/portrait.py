@@ -54,18 +54,23 @@ async def build_portrait_prompt(
     loc_hint = location.name if location else "unknown"
     fac_hint = faction.name if faction else "none"
 
-    result = await LLMService().complete_json(
-        system_prompt=(
-            "You create short English image prompts for AI portrait generation. "
-            "Return JSON with key visual_prompt (max 2 sentences, no text in image)."
-        ),
-        user_prompt=(
-            f"Genre: {universe.genre}, Style: {universe.style}\n"
-            f"Name: {character.name}\nBio: {character.bio[:300]}\n"
-            f"Traits: {traits}\nRole: {character.story_importance}\n"
-            f"Faction: {fac_hint}\nLocation: {loc_hint}"
-        ),
-    )
+    from app.services.llm import LLMError, LLMJSONError
+    try:
+        result = await LLMService().complete_json(
+            system_prompt=(
+                "You create short English image prompts for AI portrait generation. "
+                "Return JSON with key visual_prompt (max 2 sentences, no text in image)."
+            ),
+            user_prompt=(
+                f"Genre: {universe.genre}, Style: {universe.style}\n"
+                f"Name: {character.name}\nBio: {character.bio[:300]}\n"
+                f"Traits: {traits}\nRole: {character.story_importance}\n"
+                f"Faction: {fac_hint}\nLocation: {loc_hint}"
+            ),
+        )
+    except (LLMError, LLMJSONError):
+        return _template_prompt(character, universe, faction)
+
     prompt = result.get("visual_prompt") or result.get("portrait_prompt")
     if prompt and isinstance(prompt, str):
         return prompt
