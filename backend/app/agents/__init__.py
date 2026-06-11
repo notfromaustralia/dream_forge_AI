@@ -2,6 +2,7 @@ from app.agents.base import BaseAgent
 from app.agents.character_agent import CharacterAgent
 from app.agents.consistency_agent import ConsistencyAgent
 from app.agents.lore_agent import LoreAgent
+from app.agents.council_agent import CouncilAgent
 from app.agents.narrative_agent import NarrativeAgent
 from app.agents.planner import PlannerAgent
 
@@ -12,4 +13,5 @@ __all__ = [
     "CharacterAgent",
     "ConsistencyAgent",
     "NarrativeAgent",
+    "CouncilAgent",
 ]

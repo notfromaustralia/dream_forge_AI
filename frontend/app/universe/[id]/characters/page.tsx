@@ -22,6 +22,17 @@ export default function CharactersPage({ params }: { params: Promise<{ id: strin
     return map;
   }, [factions]);
 
+  const { data: locations } = useQuery({
+    queryKey: ["locations", id],
+    queryFn: () => api.getLocations(id),
+  });
+
+  const locationMap = React.useMemo(() => {
+    const map: Record<string, string> = {};
+    locations?.forEach((l) => { map[l.id] = l.name; });
+    return map;
+  }, [locations]);
+
   if (isLoading) return <div className="animate-pulse h-48 rounded-2xl bg-white/5" />;
 
   return (
@@ -32,6 +43,7 @@ export default function CharactersPage({ params }: { params: Promise<{ id: strin
           character={char}
           universeId={id}
           factionName={char.faction_id ? factionMap[char.faction_id] : undefined}
+          locationName={char.location_id ? locationMap[char.location_id] : undefined}
         />
       ))}
     </div>

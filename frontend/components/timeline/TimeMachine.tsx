@@ -23,6 +23,7 @@ export function TimeMachine({ universeId, genre = "fantasy" }: { universeId: str
   }, [universeId]);
 
   useEffect(() => {
+    if (era === null) return;
     api.getTimelineState(universeId, era).then((s) => {
       setPrevState(state);
       setState(s);
@@ -35,9 +36,22 @@ export function TimeMachine({ universeId, genre = "fantasy" }: { universeId: str
   const eraLabel = entries.find((e) => e.era_year === era)?.label ?? "Unknown Era";
 
   const backdropSrc = useMemo(() => {
+    if (era === null) return "";
     const events = state?.events.map((e) => ({ title: e.title, description: e.description })) ?? [];
     return pollinationsBannerUrl(eraScenePrompt(era, eraLabel, events, genre), `era-${universeId}-${era}`);
   }, [era, eraLabel, genre, state?.events, universeId]);
+
+  if (era === null) {
+    return (
+      <div className="rounded-2xl border border-dashed border-cyan-500/20 bg-cyan-500/5 p-12 text-center">
+        <Clock className="mx-auto h-12 w-12 text-cyan-400/40" />
+        <p className="mt-4 font-medium text-white/70">No timeline eras yet</p>
+        <p className="mt-2 text-sm text-white/40">
+          Use &quot;Add Timeline&quot; in Forge More on the Overview to create historical eras.
+        </p>
+      </div>
+    );
+  }
 
   const newEventIds = useMemo(() => {
     if (!state || !prevState) return new Set<string>();

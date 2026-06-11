@@ -9,6 +9,8 @@ import { TimelinePulse } from "@/components/universe/TimelinePulse";
 import { UniverseHero } from "@/components/universe/UniverseHero";
 import { Card, CardContent } from "@/components/ui/card";
 import { api } from "@/lib/api";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
 
 export default function OverviewPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = React.use(params);

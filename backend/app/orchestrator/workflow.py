@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.agents import (
     CharacterAgent,
     ConsistencyAgent,
+    CouncilAgent,
     LoreAgent,
     NarrativeAgent,
     PlannerAgent,
@@ -23,6 +24,7 @@ AGENT_MAP = {
     "character": CharacterAgent,
     "consistency": ConsistencyAgent,
     "narrative": NarrativeAgent,
+    "council": CouncilAgent,
 }
 
 
@@ -178,38 +180,35 @@ class Orchestrator:
         run_id = f"run_{uuid.uuid4().hex[:12]}"
         yield {"event": "council_started", "run_id": run_id, "topic": topic}
 
-        agents = [CharacterAgent, NarrativeAgent, ConsistencyAgent]
+        agent = CouncilAgent(self.session)
+        yield {"event": "agent_speaking", "agent_id": "council"}
+
+        result = await agent.run({
+            "universe_id": universe_id,
+            "topic": topic,
+            "context": context_str,
+        })
+
         debate_results = []
-
-        for agent_cls in agents:
-            agent = agent_cls(self.session)
-            yield {"event": "agent_speaking", "agent_id": agent.agent_id}
-
-            if agent.agent_id == "consistency":
-                result = await agent.run({"universe_id": universe_id})
-            elif agent.agent_id == "character":
-                result = await agent.run({
-                    "universe_id": universe_id,
-                    "prompt": f"Council debate topic: {topic}. {context_str}",
-                })
-            else:
-                result = await agent.run({
-                    "universe_id": universe_id,
-                    "intent": "story",
-                    "prompt": f"Council debate topic: {topic}. {context_str}",
-                })
-
-            stance = result.get("reasoning", {})
+        for entry in result.get("debate", []):
             debate_entry = {
-                "agent": agent.agent_id,
-                "stance": stance.get("action", "Analysis complete"),
-                "reasoning": stance.get("thought", ""),
+                "agent": entry.get("agent", "council"),
+                "title": entry.get("title", "Council Member"),
+                "stance": entry.get("stance", ""),
+                "reasoning": entry.get("reasoning", ""),
             }
             debate_results.append(debate_entry)
-            await self._trace(universe_id, run_id, agent.agent_id, stance)
+            await self._trace(universe_id, run_id, entry.get("agent", "council"), {
+                "thought": debate_entry["stance"],
+                "action": "Council argument",
+                "observation": debate_entry["reasoning"],
+            })
             yield {"event": "agent_argument", **debate_entry}
 
-        from app.demo.responses import DEMO_RESPONSES
-        consensus = DEMO_RESPONSES["council"]["consensus"]
-        yield {"event": "council_consensus", "consensus": consensus, "debate": debate_results}
+        consensus = result.get("consensus", "")
+        yield {
+            "event": "council_consensus",
+            "consensus": consensus,
+            "debate": debate_results,
+        }
         yield {"event": "council_complete", "run_id": run_id}

@@ -36,6 +36,7 @@ from app.schemas.universe import (
     GenerateCharacterRequest,
     GenerateDialogueRequest,
     GenerateLoreRequest,
+    GenerateWorldRequest,
     GenerateQuestRequest,
     GenreSuggestRequest,
     GenreSuggestResponse,

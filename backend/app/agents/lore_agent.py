@@ -59,6 +59,37 @@ class LoreAgent(BaseAgent):
             f"Timeline eras: {[(t.era_year, t.label) for t in timeline]}"
         )
 
+    def _expand_prompts(self, focus: str, genre: str, style: str, audience: str) -> tuple[str, str]:
+        base = (
+            f"You are a world-building expert expanding an existing {genre} universe "
+            f"({style} style, {audience} audience). Return ONLY new incremental JSON. "
+            "Do not repeat existing entity names. Be brief: 1-2 sentences per field."
+        )
+        schemas = {
+            "factions": (
+                f"{base} You MUST add at least 1 new faction.\n"
+                'Return JSON: {"overview_addendum": "<1 paragraph>", '
+                '"factions": [{"name":"","ideology":"","power_level":"","territory":"","era_start":0,"era_end":null}]}'
+            ),
+            "timeline": (
+                f"{base} You MUST add at least 1 timeline era and 1 historical event.\n"
+                'Return JSON: {"overview_addendum": "<1 paragraph>", '
+                '"timeline": [{"era_year":0,"label":""}], '
+                '"events": [{"title":"","description":"","era_year":0,"event_type":"historical","impact":"moderate"}]}'
+            ),
+            "locations": (
+                f"{base} You MUST add at least 1 new location.\n"
+                'Return JSON: {"overview_addendum": "<1 paragraph>", '
+                '"locations": [{"name":"","type":"city","description":"","era_start":0}]}'
+            ),
+        }
+        system = schemas.get(
+            focus,
+            f"{base}\nReturn JSON with overview_addendum and any new: "
+            f"{_LORE_JSON_FIELDS.replace('overview, ', '')}.",
+        )
+        return system, focus
+
     async def _persist_lore(
         self,
         universe_id: str,
@@ -66,7 +97,12 @@ class LoreAgent(BaseAgent):
         embed_svc: EmbeddingService,
         default_era: int = 0,
     ) -> dict[str, list]:
-        created: dict[str, list] = {"locations": [], "factions": [], "events": []}
+        created: dict[str, list] = {
+            "locations": [],
+            "factions": [],
+            "events": [],
+            "timeline": [],
+        }
 
         timeline_years = [
             _parse_era(tl.get("era_year"), default_era)
@@ -171,6 +207,7 @@ class LoreAgent(BaseAgent):
                 label=tl.get("label", "Era"),
             )
             self.session.add(entry)
+            created["timeline"].append(entry.id)
 
         return created
 
@@ -185,34 +222,24 @@ class LoreAgent(BaseAgent):
 
         if mode == "expand":
             existing = await self._existing_context(universe_id)
-            focus_hint = {
-                "factions": "Only add new factions and update overview_addendum.",
-                "timeline": "Only add new timeline entries and events.",
-                "locations": "Only add new locations.",
-                "all": "Add any new entities that fit the expansion request.",
-            }.get(focus, "Add any new entities that fit the expansion request.")
+            system_prompt, _ = self._expand_prompts(focus, genre, style, audience)
 
             try:
                 data = await self.llm.complete_json(
-                    system_prompt=(
-                        f"You are a world-building expert expanding an existing {genre} universe "
-                        f"({style} style, {audience} audience). Return ONLY new incremental content as JSON. "
-                        "Do not repeat existing entity names. Be brief: 1-2 sentences per field.\n"
-                        f"Return JSON with: overview_addendum (1 paragraph), "
-                        f"and optionally new {_LORE_JSON_FIELDS.replace('overview, ', '')}."
-                    ),
+                    system_prompt=system_prompt,
                     user_prompt=(
                         f"Expansion request: {prompt}\n\n"
-                        f"Focus: {focus_hint}\n\n"
-                        f"Existing world:\n{existing}"
+                        f"Focus area: {focus}\n\n"
+                        f"Existing world (do not duplicate these names):\n{existing}"
                     ),
+                    max_tokens=1200,
                 )
             except (LLMError, LLMJSONError) as exc:
                 logger.exception("lore expand LLM call failed")
                 return {
                     "error": str(exc),
                     "overview": "",
-                    "created": {"locations": [], "factions": [], "events": []},
+                    "created": {"locations": [], "factions": [], "events": [], "timeline": []},
                     "reasoning": self.reasoning_step(
                         f"Expanding lore for {universe_id}",
                         "LLM call failed",
@@ -230,12 +257,23 @@ class LoreAgent(BaseAgent):
                     universe.overview = f"{universe.overview}\n\n{addendum}".strip()
             await self.session.commit()
 
+            summary_parts = []
+            if created["factions"]:
+                summary_parts.append(f"{len(created['factions'])} factions")
+            if created["locations"]:
+                summary_parts.append(f"{len(created['locations'])} locations")
+            if created["events"]:
+                summary_parts.append(f"{len(created['events'])} events")
+            if created["timeline"]:
+                summary_parts.append(f"{len(created['timeline'])} timeline eras")
+            summary = ", ".join(summary_parts) or "no new entities"
+
             return {
                 "overview": addendum,
                 "created": created,
                 "reasoning": self.reasoning_step(
                     f"Expanding lore for universe {universe_id}",
-                    f"Added {len(created['factions'])} factions, {len(created['events'])} events",
+                    f"Added {summary}",
                     f"Focus: {focus}",
                 ),
             }

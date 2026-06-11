@@ -4,6 +4,7 @@ import React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Swords } from "lucide-react";
 import { FactionCard } from "@/components/factions/FactionCard";
+import { WorldEmptyState } from "@/components/universe/WorldEmptyState";
 import { api } from "@/lib/api";
 
 export default function FactionsPage({ params }: { params: Promise<{ id: string }> }) {
@@ -28,16 +29,6 @@ export default function FactionsPage({ params }: { params: Promise<{ id: string 
 
   if (isLoading) return <div className="animate-pulse h-48 rounded-2xl bg-white/5" />;
 
-  if (!factions?.length) {
-    return (
-      <Card className="border-white/10 bg-white/5">
-        <CardContent className="p-6 text-sm text-white/60">
-          No factions yet. Run <strong>Build World Lore</strong> on the Overview page to create factions and political groups.
-        </CardContent>
-      </Card>
-    );
-  }
-
   return (
     <div className="space-y-6">
       <div>
@@ -50,13 +41,15 @@ export default function FactionsPage({ params }: { params: Promise<{ id: string 
       </div>
 
       {!factions?.length ? (
-        <div className="rounded-2xl border border-dashed border-amber-500/20 bg-amber-500/5 p-12 text-center">
-          <Swords className="mx-auto h-12 w-12 text-amber-400/40" />
-          <p className="mt-4 font-medium text-white/70">No factions yet</p>
-          <p className="mt-1 text-sm text-white/40">
-            Use Forge More on the Overview to add political factions to your world.
-          </p>
-        </div>
+        <WorldEmptyState
+          universeId={id}
+          icon={Swords}
+          title="No factions yet"
+          description='Use "Add Factions" in Forge More on the Overview page to create political groups for your world.'
+          accentClass="text-amber-400"
+          borderClass="border-amber-500/20"
+          bgClass="bg-amber-500/5"
+        />
       ) : (
         <div className="grid gap-4 md:grid-cols-2">
           {factions.map((fac) => (

@@ -13,9 +13,10 @@ type CharacterCardProps = {
   character: Character;
   universeId: string;
   factionName?: string;
+  locationName?: string;
 };
 
-export function CharacterCard({ character, universeId, factionName }: CharacterCardProps) {
+export function CharacterCard({ character, universeId, factionName: factionNameProp, locationName: locationNameProp }: CharacterCardProps) {
   const [generating, setGenerating] = useState(false);
   const queryClient = useQueryClient();
 
@@ -28,8 +29,8 @@ export function CharacterCard({ character, universeId, factionName }: CharacterC
     queryFn: () => api.getLocations(universeId),
   });
 
-  const factionName = factions?.find((f) => f.id === character.faction_id)?.name;
-  const locationName = locations?.find((l) => l.id === character.location_id)?.name;
+  const factionName = factionNameProp ?? factions?.find((f) => f.id === character.faction_id)?.name;
+  const locationName = locationNameProp ?? locations?.find((l) => l.id === character.location_id)?.name;
 
   const bgPortrait =
     character.portrait_prompt && character.portrait_status === "ready"
@@ -77,21 +78,22 @@ export function CharacterCard({ character, universeId, factionName }: CharacterC
         <CardDescription className="line-clamp-3 text-left">{character.bio}</CardDescription>
       </CardHeader>
       <CardContent className="relative">
-        {factionName && (
-          <p className="mb-2 text-xs text-amber-400/80">Faction: {factionName}</p>
+        {(factionName || locationName) && (
+          <div className="mb-2 flex flex-wrap gap-2">
+            {factionName && (
+              <Badge variant="secondary" className="text-xs border-amber-500/30 text-amber-200">
+                Faction: {factionName}
+              </Badge>
+            )}
+            {locationName && (
+              <Badge variant="outline" className="text-xs border-emerald-500/30 text-emerald-200">
+                Location: {locationName}
+              </Badge>
+            )}
+          </div>
         )}
         {character.motivations && (
           <p className="text-xs text-white/50">{character.motivations}</p>
-        )}
-        {(factionName || locationName) && (
-          <div className="flex flex-wrap gap-2">
-            {factionName && (
-              <Badge variant="secondary" className="text-xs">Faction: {factionName}</Badge>
-            )}
-            {locationName && (
-              <Badge variant="outline" className="text-xs">Location: {locationName}</Badge>
-            )}
-          </div>
         )}
         <p className="text-xs text-white/30">
           Era: {character.era_start}

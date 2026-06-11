@@ -237,6 +237,24 @@ const CreateDialogueInput = z.object({
   scene: z.string().min(1).describe("Scene description"),
 });
 
+const ExpandLoreInput = z.object({
+  universe_id: UniverseId.optional(),
+  prompt: z.string().min(1).describe("What to add or change in the world"),
+  focus: z
+    .enum(["all", "factions", "timeline", "locations"])
+    .default("all")
+    .describe("Entity type to focus on"),
+});
+
+const CouncilDebateInput = z.object({
+  universe_id: UniverseId.optional(),
+  topic: z.string().min(1).describe("Story decision or lore question for the council to debate"),
+  context: z
+    .string()
+    .optional()
+    .describe("Optional extra context; universe lore is loaded automatically server-side"),
+});
+
 /* ===================== Server and tools ===================== */
 
 const server = new McpServer({ name: "dreamforge", version: "1.1.0" });
@@ -303,6 +321,70 @@ server.registerTool(
       body: { query: args.query, limit: args.limit },
     }),
   ),
+);
+
+server.registerTool(
+  "expand_lore",
+  {
+    title: "Expand lore",
+    description:
+      "Add factions, locations, timeline eras, or events to an existing universe using AI. Merges with current lore.",
+    inputSchema: ExpandLoreInput.shape,
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
+  },
+  handle("expand_lore", async (args: z.infer<typeof ExpandLoreInput>) =>
+    apiCall(`${universePath(args.universe_id)}/expand/lore`, {
+      method: "POST",
+      body: { prompt: args.prompt, focus: args.focus },
+    }),
+  ),
+);
+
+server.registerTool(
+  "council_debate",
+  {
+    title: "Council debate",
+    description:
+      "Convene the AI World Council to debate a story decision using universe context. Returns arguments and consensus.",
+    inputSchema: CouncilDebateInput.shape,
+    annotations: { readOnlyHint: true, idempotentHint: true },
+  },
+  handle("council_debate", async (args: z.infer<typeof CouncilDebateInput>) => {
+    const url = `${universePath(args.universe_id)}/council/debate`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(CONFIG.apiKey ? { Authorization: `Bearer ${CONFIG.apiKey}` } : {}),
+      },
+      body: JSON.stringify({ topic: args.topic, context: args.context ?? "" }),
+      signal: AbortSignal.timeout(CONFIG.timeoutMs),
+    });
+    if (!res.ok) {
+      const errBody = (await res.text().catch(() => "")).slice(0, 2_000);
+      throw new ApiError(res.status, errBody);
+    }
+    const reader = res.body?.getReader();
+    if (!reader) throw new Error("No SSE body from council debate");
+    const decoder = new TextDecoder();
+    const events: unknown[] = [];
+    let consensus = "";
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      for (const line of decoder.decode(value).split("\n")) {
+        if (!line.startsWith("data: ")) continue;
+        try {
+          const event = JSON.parse(line.slice(6));
+          events.push(event);
+          if (event.event === "council_consensus") consensus = event.consensus ?? "";
+        } catch {
+          // skip
+        }
+      }
+    }
+    return { consensus, events };
+  }),
 );
 
 server.registerTool(

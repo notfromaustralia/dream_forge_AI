@@ -20,8 +20,8 @@ const TILES = [
   { key: "locations", label: "Locations", icon: MapPin, href: "locations" },
   { key: "events", label: "Events", icon: Scroll, href: "events" },
   { key: "stories", label: "Stories", icon: BookOpen, href: "stories" },
-  { key: "religions", label: "Faiths", icon: Sparkles, href: "overview" },
-  { key: "magic_systems", label: "Magic", icon: Sparkles, href: "overview" },
+  { key: "religions", label: "Faiths", icon: Sparkles, href: "overview#forge-more" },
+  { key: "magic_systems", label: "Magic", icon: Sparkles, href: "overview#forge-more" },
   { key: "graph_edges", label: "Relations", icon: Network, href: "graph" },
 ] as const;
 

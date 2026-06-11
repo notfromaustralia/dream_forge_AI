@@ -55,6 +55,38 @@ export interface Character {
   portrait_status?: string;
 }
 
+export interface Location {
+  id: string;
+  name: string;
+  location_type: string;
+  description: string;
+  era_start: number;
+  era_end: number | null;
+  parent_location_id?: string | null;
+}
+
+export interface WorldContext {
+  universe_id: string;
+  name: string;
+  overview: string;
+  characters: { id: string; name: string; bio: string }[];
+  factions: { id: string; name: string; ideology?: string; power_level?: string; territory?: string }[];
+  locations: { id: string; name: string }[];
+  events: { id: string; title: string; year: number }[];
+  stories: { id: string; name: string }[];
+}
+
+export interface ExpandLoreResponse {
+  overview?: string;
+  error?: string;
+  created?: {
+    locations: string[];
+    factions: string[];
+    events: string[];
+    timeline: string[];
+  };
+}
+
 export interface Faction {
   id: string;
   name: string;
@@ -174,17 +206,18 @@ export const api = {
       body: JSON.stringify({ prompt }),
     }),
   expandLore: (id: string, prompt: string, focus: string = "all") =>
-    request<unknown>(`/universes/${id}/expand/lore`, {
+    request<ExpandLoreResponse>(`/universes/${id}/expand/lore`, {
       method: "POST",
       body: JSON.stringify({ prompt, focus }),
     }),
+  getWorldContext: (id: string) => request<WorldContext>(`/universes/${id}/context`),
   validate: (id: string) =>
     request<unknown>(`/universes/${id}/validate`, { method: "POST" }),
-  councilDebate: (id: string, topic: string) =>
+  councilDebate: (id: string, topic: string, context?: string) =>
     fetch(`${API_URL}/universes/${id}/council/debate`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ topic }),
+      body: JSON.stringify({ topic, context: context ?? "" }),
     }),
   searchLore: (id: string, query: string) =>
     request<{ results: { entity_type: string; entity_id: string; content: string; score: number }[] }>(

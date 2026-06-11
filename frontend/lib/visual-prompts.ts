@@ -1,5 +1,5 @@
 import type { ParsedContent, ParsedQuest, ParsedStory, ParsedDialogue, ParsedPlain } from "./story-parser";
-import type { Faction, Universe } from "./api";
+import type { Faction, Location, Universe } from "./api";
 
 function encodePollinations(prompt: string, seed: string, width: number, height: number): string {
   const encoded = encodeURIComponent(prompt.slice(0, 800));
@@ -54,6 +54,20 @@ export function factionBannerPrompt(faction: Pick<Faction, "name" | "ideology" |
     faction.ideology.slice(0, 100),
     `territory: ${faction.territory}`,
     "atmospheric, political drama, no text",
+  ].filter(Boolean).join(", ");
+}
+
+export function locationScenePrompt(
+  location: Pick<Location, "name" | "location_type" | "description">,
+  genre: string
+): string {
+  return [
+    "cinematic landscape establishing shot",
+    genre,
+    location.location_type,
+    location.name,
+    location.description.slice(0, 120),
+    "atmospheric, wide angle, no text, no watermark",
   ].filter(Boolean).join(", ");
 }
 
