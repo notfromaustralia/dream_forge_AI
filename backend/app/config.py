@@ -32,6 +32,17 @@ class Settings(BaseSettings):
         return self.openai_api_key or self.github_token
 
 
+def _normalize_database_url(url: str) -> str:
+    """Render/Railway provide postgresql://; SQLAlchemy async needs postgresql+asyncpg://."""
+    if url.startswith("postgresql://"):
+        return url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    return url
+
+
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()
+    settings = Settings()
+    normalized = _normalize_database_url(settings.database_url)
+    if normalized != settings.database_url:
+        return settings.model_copy(update={"database_url": normalized})
+    return settings

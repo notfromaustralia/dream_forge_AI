@@ -1,0 +1,34 @@
+# Render Blueprint — deploy backend + Postgres for DreamForge
+# Dashboard: New → Blueprint → connect this repo
+# After deploy: set GITHUB_TOKEN and CORS_ORIGINS (your Vercel URL) on dreamforge-api
+
+databases:
+  - name: dreamforge-db
+    databaseName: dreamforge
+    user: dreamforge
+    plan: free
+
+services:
+  - type: web
+    name: dreamforge-api
+    runtime: docker
+    rootDir: backend
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: dreamforge-db
+          property: connectionString
+      - key: DREAMFORGE_MODE
+        value: live
+      - key: DREAMFORGE_AUTH_MODE
+        value: demo
+      - key: AI_MODEL
+        value: gpt-4o-mini
+      - key: OPENAI_BASE_URL
+        value: https://models.inference.ai.azure.com
+      - key: GITHUB_TOKEN
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
