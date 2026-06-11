@@ -1,21 +1,24 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { Sparkles, Loader2 } from "lucide-react";
+import { Check, Loader2, Sparkles } from "lucide-react";
 import { Navbar } from "@/components/layout/Navbar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
 
-const GENRES = [
-  "fantasy", "sci-fi", "cyberpunk", "horror", "solarpunk", "dark fantasy",
-  "contemporary realism", "historical fiction", "afrofuturism", "literary fiction", "magical realism",
-];
-const STYLES = ["epic", "gritty", "whimsical", "noir", "mythic"];
-const AUDIENCES = ["general", "young adult", "mature", "all ages"];
+const FALLBACK_AUDIENCES = ["general", "young adult", "mature", "all ages"];
+
+const AGENT_STEPS = ["lore", "characters", "consistency", "narrative"] as const;
+const AGENT_LABELS: Record<string, string> = {
+  lore: "World Lore",
+  characters: "Characters",
+  consistency: "Consistency Check",
+  narrative: "Main Narrative",
+};
 
 export default function CreateUniversePage() {
   const router = useRouter();
@@ -24,12 +27,42 @@ export default function CreateUniversePage() {
   const [genre, setGenre] = useState("dark fantasy");
   const [style, setStyle] = useState("epic");
   const [audience, setAudience] = useState("general");
+  const [genreAlts, setGenreAlts] = useState<string[]>([]);
+  const [styleAlts, setStyleAlts] = useState<string[]>([]);
+  const [tagReasoning, setTagReasoning] = useState("");
+  const [suggesting, setSuggesting] = useState(false);
+  const [customGenre, setCustomGenre] = useState("");
+  const [customStyle, setCustomStyle] = useState("");
   const [generating, setGenerating] = useState(false);
-  const [progress, setProgress] = useState<string[]>([]);
+  const [completedAgents, setCompletedAgents] = useState<string[]>([]);
+  const [activeAgent, setActiveAgent] = useState<string | null>(null);
+
+  const fetchTags = useCallback(async () => {
+    if (!prompt.trim()) return;
+    setSuggesting(true);
+    try {
+      const tags = await api.suggestTags(prompt);
+      setGenre(tags.genre);
+      setStyle(tags.style);
+      setAudience(tags.audience);
+      setGenreAlts(tags.genre_alternatives);
+      setStyleAlts(tags.style_alternatives);
+      setTagReasoning(tags.reasoning);
+    } catch {
+      setTagReasoning("AI suggestions unavailable — pick or type your own tags.");
+    } finally {
+      setSuggesting(false);
+    }
+  }, [prompt]);
+
+  useEffect(() => {
+    if (step === 2) fetchTags();
+  }, [step, fetchTags]);
 
   const handleGenerate = async () => {
     setGenerating(true);
-    setProgress([]);
+    setCompletedAgents([]);
+    setActiveAgent(null);
     try {
       const res = await api.generateUniverse({ prompt, genre, style, audience });
       const reader = res.body?.getReader();
@@ -49,23 +82,11 @@ export default function CreateUniversePage() {
               universeId = event.universe_id;
             }
             if (event.event === "agent_started") {
-              setProgress((p) => [...p, `Running ${event.agent_id}...`]);
+              setActiveAgent(event.agent_id);
             }
             if (event.event === "agent_complete") {
-              const agent = event.agent_id;
-              const result = event.result ?? {};
-              if (agent === "lore" && result.created) {
-                setProgress((p) => [
-                  ...p,
-                  `Lore: ${result.created.factions?.length ?? 0} factions, ${result.created.locations?.length ?? 0} locations, ${result.created.events?.length ?? 0} events`,
-                ]);
-              } else if (agent === "character") {
-                setProgress((p) => [...p, `Characters: ${result.count ?? 0} created`]);
-              } else if (agent === "narrative") {
-                setProgress((p) => [...p, `Story: ${result.title ?? result.data?.title ?? "created"}`]);
-              } else {
-                setProgress((p) => [...p, `${agent} complete`]);
-              }
+              setCompletedAgents((p) => [...p, event.agent_id]);
+              setActiveAgent(null);
             }
             if (event.event === "workflow_complete" && event.universe_id) {
               universeId = event.universe_id;
@@ -91,6 +112,9 @@ export default function CreateUniversePage() {
     }
   };
 
+  const allGenreOptions = [genre, ...genreAlts].filter((v, i, a) => v && a.indexOf(v) === i);
+  const allStyleOptions = [style, ...styleAlts].filter((v, i, a) => v && a.indexOf(v) === i);
+
   return (
     <div className="aurora-bg min-h-screen">
       <Navbar />
@@ -105,7 +129,7 @@ export default function CreateUniversePage() {
             <CardHeader>
               <CardTitle>
                 {step === 1 && "Describe Your World"}
-                {step === 2 && "Set Genre & Style"}
+                {step === 2 && "Genre & Style"}
                 {step === 3 && "Review & Generate"}
               </CardTitle>
             </CardHeader>
@@ -120,37 +144,86 @@ export default function CreateUniversePage() {
               )}
 
               {step === 2 && (
-                <div className="space-y-4">
+                <div className="space-y-5">
+                  {suggesting && (
+                    <p className="flex items-center gap-2 text-sm text-violet-300">
+                      <Loader2 className="h-4 w-4 animate-spin" /> AI analyzing your world...
+                    </p>
+                  )}
+                  {tagReasoning && !suggesting && (
+                    <p className="text-xs text-white/40 italic">{tagReasoning}</p>
+                  )}
+
                   <div>
                     <label className="text-sm text-white/60">Genre</label>
                     <div className="mt-2 flex flex-wrap gap-2">
-                      {GENRES.map((g) => (
+                      {allGenreOptions.map((g) => (
                         <Button key={g} variant={genre === g ? "default" : "outline"} size="sm" onClick={() => setGenre(g)}>
                           {g}
                         </Button>
                       ))}
                     </div>
+                    <div className="mt-2 flex gap-2">
+                      <input
+                        value={customGenre}
+                        onChange={(e) => setCustomGenre(e.target.value)}
+                        placeholder="Or type custom genre..."
+                        className="flex-1 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white"
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && customGenre.trim()) {
+                            setGenre(customGenre.trim());
+                            setCustomGenre("");
+                          }
+                        }}
+                      />
+                      <Button variant="outline" size="sm" onClick={() => { if (customGenre.trim()) { setGenre(customGenre.trim()); setCustomGenre(""); } }}>
+                        Add
+                      </Button>
+                    </div>
                   </div>
+
                   <div>
                     <label className="text-sm text-white/60">Style</label>
                     <div className="mt-2 flex flex-wrap gap-2">
-                      {STYLES.map((s) => (
+                      {allStyleOptions.map((s) => (
                         <Button key={s} variant={style === s ? "default" : "outline"} size="sm" onClick={() => setStyle(s)}>
                           {s}
                         </Button>
                       ))}
                     </div>
+                    <div className="mt-2 flex gap-2">
+                      <input
+                        value={customStyle}
+                        onChange={(e) => setCustomStyle(e.target.value)}
+                        placeholder="Or type custom style..."
+                        className="flex-1 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white"
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && customStyle.trim()) {
+                            setStyle(customStyle.trim());
+                            setCustomStyle("");
+                          }
+                        }}
+                      />
+                      <Button variant="outline" size="sm" onClick={() => { if (customStyle.trim()) { setStyle(customStyle.trim()); setCustomStyle(""); } }}>
+                        Add
+                      </Button>
+                    </div>
                   </div>
+
                   <div>
                     <label className="text-sm text-white/60">Audience</label>
                     <div className="mt-2 flex flex-wrap gap-2">
-                      {AUDIENCES.map((a) => (
+                      {[audience, ...FALLBACK_AUDIENCES].filter((v, i, a) => a.indexOf(v) === i).map((a) => (
                         <Button key={a} variant={audience === a ? "default" : "outline"} size="sm" onClick={() => setAudience(a)}>
                           {a}
                         </Button>
                       ))}
                     </div>
                   </div>
+
+                  <Button variant="ghost" size="sm" onClick={fetchTags} disabled={suggesting}>
+                    Regenerate suggestions
+                  </Button>
                 </div>
               )}
 
@@ -158,13 +231,28 @@ export default function CreateUniversePage() {
                 <div className="space-y-4 text-sm text-white/80">
                   <p><strong>Prompt:</strong> {prompt}</p>
                   <p><strong>Genre:</strong> {genre} | <strong>Style:</strong> {style} | <strong>Audience:</strong> {audience}</p>
+
                   {generating && (
-                    <div className="space-y-2">
-                      {progress.map((p, i) => (
-                        <p key={i} className="flex items-center gap-2 text-violet-300">
-                          <Loader2 className="h-3 w-3 animate-spin" /> {p}
-                        </p>
-                      ))}
+                    <div className="mt-4 space-y-3 rounded-xl border border-violet-500/20 bg-violet-500/5 p-4">
+                      <p className="text-xs font-mono uppercase tracking-wider text-violet-300">Forging pipeline</p>
+                      {AGENT_STEPS.map((agentId) => {
+                        const done = completedAgents.includes(agentId);
+                        const active = activeAgent === agentId;
+                        return (
+                          <div key={agentId} className="flex items-center gap-2">
+                            {done ? (
+                              <Check className="h-4 w-4 text-emerald-400" />
+                            ) : active ? (
+                              <Loader2 className="h-4 w-4 animate-spin text-violet-400" />
+                            ) : (
+                              <div className="h-4 w-4 rounded-full border border-white/20" />
+                            )}
+                            <span className={done ? "text-emerald-300" : active ? "text-violet-300" : "text-white/40"}>
+                              {AGENT_LABELS[agentId] ?? agentId}
+                            </span>
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </div>

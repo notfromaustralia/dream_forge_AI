@@ -31,12 +31,15 @@ from app.schemas.universe import (
     CouncilDebateRequest,
     EntityCounts,
     EvaluationScoresResponse,
+    ExpandLoreRequest,
     ExpandStoryRequest,
     GenerateCharacterRequest,
     GenerateDialogueRequest,
     GenerateLoreRequest,
     GenerateQuestRequest,
-    GenerateWorldRequest,
+    GenreSuggestRequest,
+    GenreSuggestResponse,
+    TagsSuggestResponse,
     GraphEdgeCreate,
     GraphResponse,
     SearchRequest,
@@ -50,6 +53,11 @@ from app.schemas.universe import (
     UniverseUpdate,
 )
 from app.services.embeddings import EmbeddingService
+from app.services.suggester import suggest_genre as suggest_genre_service
+from app.services.suggester import suggest_universe_tags
+
+# Genres mirror the buttons in frontend/app/universe/new/page.tsx
+SUPPORTED_GENRES = ["fantasy", "sci-fi", "cyberpunk", "horror", "solarpunk", "dark fantasy"]
 
 router = APIRouter(prefix="/universes", tags=["universes"])
 
@@ -104,6 +112,15 @@ async def list_universes(
     return UniverseListResponse(universes=items, total=len(items))
 
 
+@router.post("/suggest-tags", response_model=TagsSuggestResponse)
+async def suggest_tags(
+    body: GenreSuggestRequest,
+    user: User = Depends(get_current_user),
+):
+    result = await suggest_universe_tags(body.prompt)
+    return TagsSuggestResponse(**result)
+
+
 @router.post("/generate")
 async def generate_universe(
     body: UniverseGenerateRequest,
@@ -129,10 +146,11 @@ async def generate_universe(
         orch = Orchestrator(db)
         context = body.model_dump()
         async for event in orch.run_generate_universe(universe_id, context):
-            universe_obj = await db.get(Universe, universe_id)
-            if universe_obj:
-                universe_obj.status = "active"
-                await db.commit()
+            if event.get("event") == "workflow_complete":
+                universe_obj = await db.get(Universe, universe_id)
+                if universe_obj:
+                    universe_obj.status = "active"
+                    await db.commit()
             yield f"data: {json.dumps(event)}\n\n"
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
@@ -224,12 +242,24 @@ async def get_world_context(
         return [{"id": r.id, "name": getattr(r, "name", getattr(r, "title", ""))} for r in rows]
 
     chars = (await db.execute(select(Character).where(Character.universe_id == universe_id).limit(20))).scalars().all()
+    faction_rows = (
+        await db.execute(select(Faction).where(Faction.universe_id == universe_id).limit(20))
+    ).scalars().all()
     return ContextResponse(
         universe_id=universe_id,
         name=universe.name,
         overview=universe.overview,
         characters=[{"id": c.id, "name": c.name, "bio": c.bio[:200]} for c in chars],
-        factions=await fetch(Faction),
+        factions=[
+            {
+                "id": f.id,
+                "name": f.name,
+                "ideology": f.ideology[:200],
+                "power_level": f.power_level,
+                "territory": f.territory,
+            }
+            for f in faction_rows
+        ],
         locations=await fetch(Location),
         events=[{"id": e.id, "title": e.title, "year": e.era_year} for e in (await db.execute(select(Event).where(Event.universe_id == universe_id).limit(20))).scalars().all()],
         stories=await fetch(Story),
@@ -289,9 +319,26 @@ async def get_timeline_state(
     return TimelineStateResponse(
         era_year=era_year,
         characters=[{"id": c.id, "name": c.name, "bio": c.bio[:150]} for c in chars],
-        factions=[{"id": f.id, "name": f.name, "power": f.power_level} for f in factions],
+        factions=[
+            {
+                "id": f.id,
+                "name": f.name,
+                "power": f.power_level,
+                "ideology": f.ideology[:120],
+                "territory": f.territory,
+            }
+            for f in factions
+        ],
         locations=[{"id": loc.id, "name": loc.name} for loc in locations],
-        events=[{"id": e.id, "title": e.title, "year": e.era_year} for e in events],
+        events=[
+            {
+                "id": e.id,
+                "title": e.title,
+                "year": e.era_year,
+                "description": e.description[:150],
+            }
+            for e in events
+        ],
     )
 
 
@@ -405,7 +452,27 @@ async def generate_quest(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    prompt = body.prompt or f"Generate a quest involving {body.faction_name or 'the world'}"
+    parts: list[str] = []
+    if body.faction_name:
+        faction = (
+            await db.execute(
+                select(Faction).where(
+                    Faction.universe_id == universe_id,
+                    Faction.name == body.faction_name,
+                )
+            )
+        ).scalars().first()
+        if faction:
+            parts.append(
+                f"Focus on faction: {faction.name} ({faction.power_level}) — {faction.ideology}"
+            )
+        else:
+            parts.append(f"Focus on faction: {body.faction_name}")
+    if body.prompt:
+        parts.append(body.prompt)
+    if not parts:
+        parts.append("Create a compelling side quest set in this universe.")
+    prompt = " ".join(parts)
     agent = NarrativeAgent(db)
     result = await agent.run({"universe_id": universe_id, "intent": "quest", "prompt": prompt})
     return result
@@ -436,8 +503,34 @@ async def expand_story(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    universe = await db.get(Universe, universe_id)
+    if not universe or universe.user_id != user.id:
+        raise HTTPException(404, "Universe not found")
     agent = NarrativeAgent(db)
     result = await agent.run({"universe_id": universe_id, "intent": "expand_story", "prompt": body.prompt})
+    return result
+
+
+@router.post("/{universe_id}/expand/lore")
+async def expand_lore(
+    universe_id: str,
+    body: ExpandLoreRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    universe = await db.get(Universe, universe_id)
+    if not universe or universe.user_id != user.id:
+        raise HTTPException(404, "Universe not found")
+    agent = LoreAgent(db)
+    result = await agent.run({
+        "universe_id": universe_id,
+        "prompt": body.prompt,
+        "genre": universe.genre,
+        "style": universe.style,
+        "audience": universe.audience,
+        "mode": "expand",
+        "focus": body.focus,
+    })
     return result
 
 

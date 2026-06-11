@@ -3,6 +3,7 @@ import uuid
 from collections.abc import AsyncGenerator
 from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents import (
@@ -12,7 +13,8 @@ from app.agents import (
     NarrativeAgent,
     PlannerAgent,
 )
-from app.db.models import AgentTrace, Universe, WorkflowRun
+from app.db.models import AgentTrace, Character, Universe, WorkflowRun
+from app.services.portrait import generate_character_portrait
 from app.evaluation.scorer import EvaluationScorer
 
 AGENT_MAP = {
@@ -78,6 +80,21 @@ class Orchestrator:
                 if universe:
                     universe.overview = result["overview"]
                     await self.session.commit()
+
+            if step in ("characters", "character") and not result.get("error"):
+                universe = await self.session.get(Universe, universe_id)
+                if universe:
+                    chars = (
+                        await self.session.execute(
+                            select(Character).where(Character.universe_id == universe_id)
+                        )
+                    ).scalars().all()
+                    for char in chars:
+                        if not char.portrait_prompt:
+                            try:
+                                await generate_character_portrait(self.session, char, universe)
+                            except Exception:
+                                pass
 
         scorer = EvaluationScorer(self.session)
         scores = await scorer.calculate(universe_id)

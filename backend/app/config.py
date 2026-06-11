@@ -6,7 +6,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=("../.env", ".env"), extra="ignore")
 
-    database_url: str = "postgresql+asyncpg://sydney@localhost:5432/dreamforge"
+    database_url: str = "sqlite+aiosqlite:///./dreamforge.db"
     dreamforge_mode: str = "demo"
     dreamforge_auth_mode: str = "demo"
     azure_tenant_id: str = ""
@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     openai_base_url: str = "https://models.inference.ai.azure.com"
     ai_model: str = "gpt-4o-mini"
     github_token: str = ""
+    llm_max_tokens: int = 800
     demo_user_id: str = "demo_user_001"
     cors_origins: str = "http://localhost:3000"
 

@@ -1,9 +1,13 @@
 "use client";
 
 import React from "react";
+import { useQuery } from "@tanstack/react-query";
 import { TimeMachine } from "@/components/timeline/TimeMachine";
+import { api } from "@/lib/api";
 
 export default function TimelinePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = React.use(params);
-  return <TimeMachine universeId={id} />;
+  const { data: universe } = useQuery({ queryKey: ["universe", id], queryFn: () => api.getUniverse(id) });
+
+  return <TimeMachine universeId={id} genre={universe?.genre} />;
 }

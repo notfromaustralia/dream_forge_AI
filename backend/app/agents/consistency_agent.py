@@ -1,9 +1,13 @@
+import logging
 from typing import Any
 
 from sqlalchemy import select
 
 from app.agents.base import BaseAgent
 from app.db.models import Character, Event, Faction
+from app.services.llm import LLMError, LLMJSONError
+
+logger = logging.getLogger("dreamforge.consistency")
 
 
 class ConsistencyAgent(BaseAgent):
@@ -45,11 +49,19 @@ class ConsistencyAgent(BaseAgent):
                 "message": "Timeline spans over 10,000 years — verify intentional",
             })
 
-        llm_result = await self.llm.complete_json(
-            system_prompt="You are a lore consistency validator. Return JSON with passed, issues, score, notes.",
-            user_prompt=f"Validate universe {universe_id}: {len(characters)} characters, {len(events)} events, {len(factions)} factions. Known issues: {issues}",
-            demo_key="consistency",
-        )
+        try:
+            llm_result = await self.llm.complete_json(
+                system_prompt="You are a lore consistency validator. Return JSON with passed, issues, score, notes.",
+                user_prompt=f"Validate universe {universe_id}: {len(characters)} characters, {len(events)} events, {len(factions)} factions. Known issues: {issues}",
+            )
+        except (LLMError, LLMJSONError) as exc:
+            logger.exception("consistency LLM call failed")
+            llm_result = {
+                "passed": len(issues) == 0,
+                "issues": [],
+                "score": 0.8 if not issues else 0.5,
+                "notes": f"LLM validation skipped: {exc}",
+            }
 
         if issues:
             llm_result["issues"] = issues + llm_result.get("issues", [])

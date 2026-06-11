@@ -12,9 +12,10 @@ import { pollinationsPortraitUrl } from "@/lib/visual-prompts";
 type CharacterCardProps = {
   character: Character;
   universeId: string;
+  factionName?: string;
 };
 
-export function CharacterCard({ character, universeId }: CharacterCardProps) {
+export function CharacterCard({ character, universeId, factionName }: CharacterCardProps) {
   const [generating, setGenerating] = useState(false);
   const queryClient = useQueryClient();
 
@@ -75,7 +76,10 @@ export function CharacterCard({ character, universeId }: CharacterCardProps) {
         </div>
         <CardDescription className="line-clamp-3 text-left">{character.bio}</CardDescription>
       </CardHeader>
-      <CardContent className="relative space-y-2">
+      <CardContent className="relative">
+        {factionName && (
+          <p className="mb-2 text-xs text-amber-400/80">Faction: {factionName}</p>
+        )}
         {character.motivations && (
           <p className="text-xs text-white/50">{character.motivations}</p>
         )}

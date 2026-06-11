@@ -7,54 +7,68 @@ import {
   ChevronDown,
   ChevronUp,
   MapPin,
+  MessageSquare,
   Scroll,
   Skull,
   Sparkles,
-  Swords,
   User,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import type { Story } from "@/lib/api";
-import { parseStoryContent, type ParsedStory } from "@/lib/story-parser";
+import {
+  parseStoryContent,
+  type ParsedContent,
+  type ParsedQuest,
+  type ParsedStory,
+  type ParsedDialogue,
+  type ParsedPlain,
+} from "@/lib/story-parser";
 import { dicebearAvatarUrl, pollinationsBannerUrl, storyBannerPrompt } from "@/lib/visual-prompts";
 
 type StoryCardProps = {
   story: Story;
   index?: number;
+  expanded?: boolean;
+  hideBanner?: boolean;
 };
 
-function StoryBanner({ story, parsed }: { story: Story; parsed: ParsedStory }) {
-  const [bannerError, setBannerError] = useState(false);
-  const prompt = storyBannerPrompt(parsed);
-  const bannerUrl = pollinationsBannerUrl(prompt, story.id);
-
-  if (bannerError) {
-    return (
-      <div className="h-40 rounded-t-2xl bg-gradient-to-br from-violet-900/40 to-cyan-900/20" />
-    );
+function Banner({ story, parsed }: { story: Story; parsed: ParsedContent }) {
+  const [errored, setErrored] = useState(false);
+  if (errored) {
+    return <div className="h-40 rounded-t-2xl bg-gradient-to-br from-violet-900/40 to-cyan-900/20" />;
   }
-
   return (
     <div className="relative h-40 overflow-hidden rounded-t-2xl">
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src={bannerUrl}
+        src={pollinationsBannerUrl(storyBannerPrompt(parsed), story.id)}
         alt=""
         className="h-full w-full object-cover"
-        onError={() => setBannerError(true)}
+        onError={() => setErrored(true)}
       />
       <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-transparent" />
     </div>
   );
 }
 
-function QuestCardBody({ parsed, expanded }: { parsed: Extract<ParsedStory, { kind: "quest" }>; expanded: boolean }) {
+function Section({ icon: Icon, label, children }: { icon: typeof Sparkles; label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <h4 className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-white/40">
+        <Icon className="h-3.5 w-3.5" /> {label}
+      </h4>
+      {children}
+    </div>
+  );
+}
+
+function QuestBody({ parsed, expanded }: { parsed: ParsedQuest; expanded: boolean }) {
+  const objectivesShown = expanded ? parsed.objectives : parsed.objectives.slice(0, 3);
   return (
     <div className="space-y-4">
-      {parsed.description && (
-        <p className="text-sm text-white/70">{parsed.description}</p>
-      )}
+      {parsed.synopsis && <p className="text-sm text-white/70">{parsed.synopsis}</p>}
+
       {parsed.questGiver && (
         <div className="flex items-center gap-2">
           <User className="h-4 w-4 text-cyan-400" />
@@ -64,13 +78,11 @@ function QuestCardBody({ parsed, expanded }: { parsed: Extract<ParsedStory, { ki
           </Badge>
         </div>
       )}
-      {parsed.objectives.length > 0 && (
-        <div>
-          <h4 className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-white/40">
-            <CheckCircle2 className="h-3.5 w-3.5" /> Objectives
-          </h4>
+
+      {objectivesShown.length > 0 && (
+        <Section icon={CheckCircle2} label="Objectives">
           <ol className="space-y-2">
-            {(expanded ? parsed.objectives : parsed.objectives.slice(0, 3)).map((obj, i) => (
+            {objectivesShown.map((obj, i) => (
               <li key={i} className="flex gap-2 text-sm text-white/80">
                 <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-cyan-500/20 text-xs text-cyan-300">
                   {i + 1}
@@ -79,27 +91,34 @@ function QuestCardBody({ parsed, expanded }: { parsed: Extract<ParsedStory, { ki
               </li>
             ))}
           </ol>
-        </div>
+        </Section>
       )}
-      {parsed.locations.length > 0 && (
-        <div>
-          <h4 className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-white/40">
-            <MapPin className="h-3.5 w-3.5" /> Locations
-          </h4>
-          <div className="flex gap-2 overflow-x-auto pb-1">
-            {parsed.locations.map((loc) => (
-              <Badge key={loc} variant="secondary" className="shrink-0">
-                {loc}
-              </Badge>
+
+      {expanded && parsed.obstacles.length > 0 && (
+        <Section icon={Skull} label="Obstacles">
+          <div className="space-y-2">
+            {parsed.obstacles.map((o) => (
+              <div key={o.name} className="rounded-lg border border-red-500/20 bg-red-500/5 p-2">
+                <p className="text-sm font-medium text-red-200">{o.name}</p>
+                {o.description && <p className="mt-1 text-xs text-white/60">{o.description}</p>}
+              </div>
             ))}
           </div>
-        </div>
+        </Section>
       )}
+
+      {parsed.locations.length > 0 && (
+        <Section icon={MapPin} label="Locations">
+          <div className="flex flex-wrap gap-2">
+            {parsed.locations.map((loc) => (
+              <Badge key={loc} variant="secondary">{loc}</Badge>
+            ))}
+          </div>
+        </Section>
+      )}
+
       {parsed.rewards.length > 0 && (
-        <div>
-          <h4 className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-white/40">
-            <Sparkles className="h-3.5 w-3.5" /> Rewards
-          </h4>
+        <Section icon={Sparkles} label="Rewards">
           <div className="flex flex-wrap gap-2">
             {parsed.rewards.map((r) => (
               <Badge key={r} className="bg-amber-500/20 text-amber-200 hover:bg-amber-500/30">
@@ -107,54 +126,24 @@ function QuestCardBody({ parsed, expanded }: { parsed: Extract<ParsedStory, { ki
               </Badge>
             ))}
           </div>
-        </div>
-      )}
-      {expanded && parsed.enemies && parsed.enemies.length > 0 && (
-        <div>
-          <h4 className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-white/40">
-            <Skull className="h-3.5 w-3.5" /> Enemies
-          </h4>
-          <div className="flex flex-wrap gap-2">
-            {parsed.enemies.map((e) => (
-              <Badge key={e.name} variant="outline" className="gap-1 border-red-500/30 text-red-200">
-                <Swords className="h-3 w-3" />
-                {e.name}
-                {e.count ? ` ×${e.count}` : ""}
-                {e.difficulty ? ` (${e.difficulty})` : ""}
-              </Badge>
-            ))}
-          </div>
-        </div>
+        </Section>
       )}
     </div>
   );
 }
 
-function NarrativeCardBody({ parsed, expanded }: { parsed: Extract<ParsedStory, { kind: "narrative" }>; expanded: boolean }) {
-  const plotSteps = [
-    { key: "introduction", label: "Introduction", text: parsed.plot.introduction },
-    { key: "conflict", label: "Conflict", text: parsed.plot.conflict },
-    { key: "climax", label: "Climax", text: parsed.plot.climax },
-    { key: "resolution", label: "Resolution", text: parsed.plot.resolution },
-  ].filter((s) => s.text);
-
+function StoryBody({ parsed }: { parsed: ParsedStory }) {
   return (
     <div className="space-y-4">
-      {(parsed.setting.world || parsed.setting.location) && (
-        <p className="text-sm text-white/60">
-          {[parsed.setting.world, parsed.setting.location, parsed.setting.era].filter(Boolean).join(" · ")}
-        </p>
-      )}
+      {parsed.synopsis && <p className="text-sm text-white/70">{parsed.synopsis}</p>}
+      {parsed.setting && <p className="text-xs text-white/50 italic">{parsed.setting}</p>}
+
       {parsed.characters.length > 0 && (
         <div className="flex flex-wrap gap-3">
           {parsed.characters.map((c) => (
             <div key={c.name} className="flex items-center gap-2 rounded-full bg-white/5 py-1 pl-1 pr-3">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={dicebearAvatarUrl(c.name)}
-                alt=""
-                className="h-8 w-8 rounded-full"
-              />
+              <img src={dicebearAvatarUrl(c.name)} alt="" className="h-8 w-8 rounded-full" />
               <div>
                 <p className="text-xs font-medium">{c.name}</p>
                 {c.role && <p className="text-[10px] text-white/40">{c.role}</p>}
@@ -163,47 +152,76 @@ function NarrativeCardBody({ parsed, expanded }: { parsed: Extract<ParsedStory, 
           ))}
         </div>
       )}
-      {plotSteps.length > 0 && (
-        <div className="space-y-3 border-l border-violet-500/30 pl-4">
-          {(expanded ? plotSteps : plotSteps.slice(0, 2)).map((step) => (
-            <div key={step.key}>
-              <p className="text-xs font-semibold uppercase tracking-wide text-violet-400">{step.label}</p>
-              <p className="mt-1 text-sm text-white/75">{step.text}</p>
+
+      {parsed.beats.length > 0 && (
+        <div className="space-y-5 border-l border-violet-500/30 pl-4">
+          {parsed.beats.map((b, i) => (
+            <div key={i}>
+              <p className="text-xs font-semibold uppercase tracking-wide text-violet-400">
+                {b.label || `Beat ${i + 1}`}
+              </p>
+              <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-white/80">
+                {b.text}
+              </p>
             </div>
           ))}
         </div>
       )}
-      {expanded && parsed.dialogue && parsed.dialogue.length > 0 && (
-        <div className="space-y-2">
-          {parsed.dialogue.map((d, i) => (
-            <blockquote
-              key={i}
-              className="rounded-lg border-l-2 border-violet-500/50 bg-white/5 px-3 py-2"
-            >
-              <p className="text-xs font-medium text-violet-300">{d.character}</p>
-              <p className="text-sm italic text-white/70">&ldquo;{d.line}&rdquo;</p>
-            </blockquote>
-          ))}
-        </div>
+
+      {parsed.themes.length > 0 && (
+        <Section icon={Sparkles} label="Themes">
+          <div className="flex flex-wrap gap-2">
+            {parsed.themes.map((t) => (
+              <Badge key={t} variant="outline" className="border-violet-500/30 text-violet-200">
+                {t}
+              </Badge>
+            ))}
+          </div>
+        </Section>
       )}
     </div>
   );
 }
 
-function PlainCardBody({ parsed }: { parsed: Extract<ParsedStory, { kind: "plain" }> }) {
+function DialogueBody({ parsed }: { parsed: ParsedDialogue }) {
+  return (
+    <div className="space-y-4">
+      {parsed.synopsis && <p className="text-sm text-white/70">{parsed.synopsis}</p>}
+      {parsed.setting && <p className="text-xs text-white/50 italic">{parsed.setting}</p>}
+
+      {parsed.lines.length > 0 && (
+        <Section icon={MessageSquare} label="Dialogue">
+          <div className="space-y-2">
+            {parsed.lines.map((d, i) => (
+              <blockquote key={i} className="rounded-lg border-l-2 border-violet-500/50 bg-white/5 px-3 py-2">
+                <p className="text-xs font-medium text-violet-300">{d.character}</p>
+                <p className="text-sm italic text-white/70">&ldquo;{d.line}&rdquo;</p>
+              </blockquote>
+            ))}
+          </div>
+        </Section>
+      )}
+    </div>
+  );
+}
+
+function PlainBody({ parsed }: { parsed: ParsedPlain }) {
   return <p className="text-sm text-white/70 whitespace-pre-wrap">{parsed.text}</p>;
 }
 
-export function StoryCard({ story, index = 0 }: StoryCardProps) {
-  const [expanded, setExpanded] = useState(false);
+export function StoryCard({ story, index = 0, expanded: expandedProp, hideBanner = false }: StoryCardProps) {
+  const [expandedState, setExpandedState] = useState(false);
+  const expanded = expandedProp ?? expandedState;
   const parsed = parseStoryContent(story.title, story.synopsis, story.content_json);
-  const scrollAccent = story.arc_type === "side" ? "text-cyan-400" : "text-violet-400";
-  const needsExpand =
-    parsed.kind === "quest"
-      ? (parsed.objectives.length > 3 || (parsed.enemies?.length ?? 0) > 0)
-      : parsed.kind === "narrative"
-        ? true
-        : parsed.text.length > 200;
+
+  const accent =
+    story.arc_type === "side" ? "text-cyan-400" :
+    story.arc_type === "scene" ? "text-pink-400" :
+    "text-violet-400";
+
+  const canExpand =
+    (parsed.kind === "quest" && (parsed.objectives.length > 3 || parsed.obstacles.length > 0)) ||
+    (parsed.kind === "plain" && parsed.text.length > 200);
 
   return (
     <motion.div
@@ -212,14 +230,12 @@ export function StoryCard({ story, index = 0 }: StoryCardProps) {
       transition={{ delay: index * 0.05 }}
     >
       <Card className="overflow-hidden border-white/10 bg-white/5">
-        <StoryBanner story={story} parsed={parsed} />
+        {!hideBanner && <Banner story={story} parsed={parsed} />}
         <CardContent className="p-5">
-          <div className="mb-4 flex items-start justify-between gap-2">
+          <div className={`mb-4 flex items-start justify-between gap-2 ${hideBanner ? "" : ""}`}>
             <div className="flex items-start gap-2">
-              <Scroll className={`mt-0.5 h-5 w-5 shrink-0 ${scrollAccent}`} />
-              <div>
-                <h3 className="text-lg font-semibold">{parsed.title}</h3>
-              </div>
+              <Scroll className={`mt-0.5 h-5 w-5 shrink-0 ${accent}`} />
+              {!hideBanner && <h3 className="text-lg font-semibold">{parsed.title}</h3>}
             </div>
             <div className="flex shrink-0 flex-col items-end gap-1">
               <Badge variant="outline" className={story.arc_type === "side" ? "border-cyan-500/40 text-cyan-300" : ""}>
@@ -229,24 +245,21 @@ export function StoryCard({ story, index = 0 }: StoryCardProps) {
             </div>
           </div>
 
-          {parsed.kind === "quest" && <QuestCardBody parsed={parsed} expanded={expanded} />}
-          {parsed.kind === "narrative" && <NarrativeCardBody parsed={parsed} expanded={expanded} />}
-          {parsed.kind === "plain" && <PlainCardBody parsed={parsed} />}
+          {parsed.kind === "quest" && <QuestBody parsed={parsed} expanded={expanded} />}
+          {parsed.kind === "story" && <StoryBody parsed={parsed} />}
+          {parsed.kind === "dialogue" && <DialogueBody parsed={parsed} />}
+          {parsed.kind === "plain" && <PlainBody parsed={parsed} />}
 
-          {needsExpand && (
+          {canExpand && expandedProp === undefined && (
             <button
               type="button"
-              onClick={() => setExpanded(!expanded)}
+              onClick={() => setExpandedState(!expandedState)}
               className="mt-4 flex items-center gap-1 text-xs text-white/40 hover:text-white/70"
             >
               {expanded ? (
-                <>
-                  <ChevronUp className="h-3.5 w-3.5" /> Show less
-                </>
+                <><ChevronUp className="h-3.5 w-3.5" /> Show less</>
               ) : (
-                <>
-                  <ChevronDown className="h-3.5 w-3.5" /> Show more
-                </>
+                <><ChevronDown className="h-3.5 w-3.5" /> Show more</>
               )}
             </button>
           )}

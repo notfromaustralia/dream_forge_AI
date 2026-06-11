@@ -6,7 +6,10 @@ from app.config import get_settings
 from app.db.models import Base
 
 settings = get_settings()
-engine = create_async_engine(settings.database_url, echo=False)
+
+_is_sqlite = settings.database_url.startswith("sqlite")
+_connect_args = {"check_same_thread": False} if _is_sqlite else {}
+engine = create_async_engine(settings.database_url, echo=False, connect_args=_connect_args)
 async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 

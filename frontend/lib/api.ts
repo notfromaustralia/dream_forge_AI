@@ -34,6 +34,8 @@ export interface Universe {
     factions: number;
     events: number;
     stories: number;
+    religions: number;
+    magic_systems: number;
     graph_edges: number;
   };
 }
@@ -59,6 +61,8 @@ export interface Faction {
   ideology: string;
   power_level: string;
   territory: string;
+  era_start?: number;
+  era_end?: number | null;
 }
 
 export interface Event {
@@ -93,27 +97,31 @@ export interface TimelineEntry {
 export interface TimelineState {
   era_year: number;
   characters: { id: string; name: string; bio: string }[];
-  factions: { id: string; name: string; power: string }[];
+  factions: { id: string; name: string; power: string; ideology?: string; territory?: string }[];
   locations: { id: string; name: string }[];
-  events: { id: string; title: string; year: number }[];
+  events: { id: string; title: string; year: number; description?: string }[];
 }
 
-export interface Location {
-  id: string;
-  name: string;
-  location_type: string;
-  description: string;
-  era_start: number;
-  era_end: number | null;
+export interface TagsSuggestResponse {
+  genre: string;
+  style: string;
+  audience: string;
+  genre_alternatives: string[];
+  style_alternatives: string[];
+  reasoning: string;
 }
 
 export const api = {
   listUniverses: () => request<{ universes: Universe[]; total: number }>("/universes"),
   getUniverse: (id: string) => request<Universe>(`/universes/${id}`),
-  updateUniverse: (id: string, body: { overview?: string; name?: string; genre?: string }) =>
-    request<Universe>(`/universes/${id}`, {
-      method: "PATCH",
-      body: JSON.stringify(body),
+  updateUniverse: (id: string, body: Partial<Pick<Universe, "name" | "overview" | "prompt" | "genre" | "style" | "audience" | "status">>) =>
+    request<Universe>(`/universes/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  deleteUniverse: (id: string) =>
+    request<{ deleted: boolean }>(`/universes/${id}`, { method: "DELETE" }),
+  suggestTags: (prompt: string) =>
+    request<TagsSuggestResponse>("/universes/suggest-tags", {
+      method: "POST",
+      body: JSON.stringify({ prompt }),
     }),
   generateUniverse: (body: { prompt: string; genre: string; style: string; audience: string }) =>
     fetch(`${API_URL}/universes/generate`, {
@@ -122,6 +130,10 @@ export const api = {
       body: JSON.stringify(body),
     }),
   getCharacters: (id: string) => request<Character[]>(`/universes/${id}/characters`),
+  getFaction: (universeId: string, factionId: string) =>
+    request<Faction[]>(`/universes/${universeId}/factions`).then(
+      (factions) => factions.find((f) => f.id === factionId) ?? Promise.reject(new Error("Faction not found"))
+    ),
   generatePortrait: (universeId: string, characterId: string) =>
     request<{ portrait_prompt: string; image_url: string; portrait_status: string }>(
       `/universes/${universeId}/characters/${characterId}/generate-portrait`,
@@ -131,6 +143,12 @@ export const api = {
   getLocations: (id: string) => request<Location[]>(`/universes/${id}/locations`),
   getEvents: (id: string) => request<Event[]>(`/universes/${id}/events`),
   getStories: (id: string) => request<Story[]>(`/universes/${id}/stories`),
+  getStory: (universeId: string, storyId: string) =>
+    request<Story[]>(`/universes/${universeId}/stories`).then((stories) => {
+      const story = stories.find((s) => s.id === storyId);
+      if (!story) return Promise.reject(new Error("Story not found"));
+      return story;
+    }),
   getGraph: (id: string, eraYear?: number) =>
     request<GraphData>(`/universes/${id}/graph${eraYear ? `?era_year=${eraYear}` : ""}`),
   getTimeline: (id: string) => request<TimelineEntry[]>(`/universes/${id}/timeline`),
@@ -145,21 +163,20 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ prompt }),
     }),
-  generateLore: (id: string, prompt?: string) =>
-    request<{ overview?: string; created?: Record<string, string[]>; entity_counts?: Universe["entity_counts"] }>(
-      `/universes/${id}/generate/lore`,
-      { method: "POST", body: JSON.stringify({ prompt: prompt ?? "" }) }
-    ),
-  generateWorld: (id: string, body: { prompt?: string; character_prompt?: string; quest_count?: number }) =>
-    fetch(`${API_URL}/universes/${id}/generate/world`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    }),
-  generateQuest: (id: string, prompt: string) =>
+  generateQuest: (id: string, prompt: string, factionName?: string) =>
     request<unknown>(`/universes/${id}/generate/quest`, {
       method: "POST",
+      body: JSON.stringify({ prompt, faction_name: factionName || null }),
+    }),
+  expandStory: (id: string, prompt: string) =>
+    request<unknown>(`/universes/${id}/expand/story`, {
+      method: "POST",
       body: JSON.stringify({ prompt }),
+    }),
+  expandLore: (id: string, prompt: string, focus: string = "all") =>
+    request<unknown>(`/universes/${id}/expand/lore`, {
+      method: "POST",
+      body: JSON.stringify({ prompt, focus }),
     }),
   validate: (id: string) =>
     request<unknown>(`/universes/${id}/validate`, { method: "POST" }),
