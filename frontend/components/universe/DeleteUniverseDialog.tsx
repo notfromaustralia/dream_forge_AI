@@ -13,13 +13,19 @@ export function DeleteUniverseDialog({
   universeName,
   redirectTo = "/dashboard",
   trigger,
+  open: controlledOpen,
+  onOpenChange,
 }: {
   universeId: string;
   universeName: string;
   redirectTo?: string;
   trigger?: React.ReactNode;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = controlledOpen ?? internalOpen;
+  const setOpen = onOpenChange ?? setInternalOpen;
   const [deleting, setDeleting] = useState(false);
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -41,13 +47,21 @@ export function DeleteUniverseDialog({
 
   return (
     <>
-      <div onClick={() => setOpen(true)} role="button" tabIndex={0} onKeyDown={(e) => e.key === "Enter" && setOpen(true)}>
-        {trigger ?? (
-          <Button variant="outline" size="sm" className="gap-1 border-red-500/30 text-red-300 hover:bg-red-500/10">
-            <Trash2 className="h-3.5 w-3.5" /> Delete
-          </Button>
-        )}
-      </div>
+      {trigger && (
+        <div onClick={() => setOpen(true)} role="button" tabIndex={0} onKeyDown={(e) => e.key === "Enter" && setOpen(true)}>
+          {trigger}
+        </div>
+      )}
+      {!trigger && controlledOpen === undefined && (
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-1 border-red-500/30 text-red-300 hover:bg-red-500/10"
+          onClick={() => setOpen(true)}
+        >
+          <Trash2 className="h-3.5 w-3.5" /> Delete
+        </Button>
+      )}
       {open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
           <div className="w-full max-w-md rounded-2xl border border-white/10 bg-slate-950 p-6 shadow-2xl">

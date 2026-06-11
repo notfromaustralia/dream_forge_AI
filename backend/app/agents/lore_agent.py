@@ -7,6 +7,7 @@ from sqlalchemy import select
 
 from app.agents.base import BaseAgent
 from app.db.models import Event, Faction, Location, MagicSystem, Religion, TimelineEntry, Universe
+from app.demo.responses import get_demo_response
 from app.services.embeddings import EmbeddingService
 from app.services.llm import LLMError, LLMJSONError
 
@@ -31,6 +32,58 @@ def _parse_era(value: Any, default: int = 0) -> int:
         return int(value)
     except (TypeError, ValueError):
         return default
+
+
+def _truncate(value: Any, max_len: int, fallback: str = "") -> str:
+    if not isinstance(value, str):
+        return fallback
+    text = value.strip()
+    if not text:
+        return fallback
+    return text[:max_len]
+
+
+_VALID_IMPACTS = ("critical", "major", "moderate", "minor")
+_VALID_POWER_LEVELS = ("dominant", "high", "major", "moderate", "medium", "low", "minor")
+
+
+def _normalize_impact(value: Any) -> str:
+    """impact column is varchar(32) — must be a short severity label, not a sentence."""
+    if not isinstance(value, str):
+        return "moderate"
+    lower = value.lower().strip()
+    for level in _VALID_IMPACTS:
+        if level in lower.split():
+            return level
+    for level in _VALID_IMPACTS:
+        if level in lower:
+            return level
+    if len(lower) <= 32:
+        return lower or "moderate"
+    return "moderate"
+
+
+def _normalize_power_level(value: Any) -> str:
+    if not isinstance(value, str):
+        return "moderate"
+    lower = value.lower().strip()
+    mapping = {
+        "dominant": "dominant",
+        "high": "high",
+        "major": "major",
+        "moderate": "moderate",
+        "medium": "moderate",
+        "low": "low",
+        "minor": "low",
+    }
+    for key, normalized in mapping.items():
+        if key in lower:
+            return normalized
+    return _truncate(lower, 32, "moderate")
+
+
+def _normalize_event_type(value: Any) -> str:
+    return _truncate(str(value).strip().lower().replace(" ", "_"), 64, "historical") if isinstance(value, str) and value.strip() else "historical"
 
 
 class LoreAgent(BaseAgent):
@@ -140,10 +193,10 @@ class LoreAgent(BaseAgent):
             faction = Faction(
                 id=fac_id,
                 universe_id=universe_id,
-                name=fac.get("name", "Unknown Faction"),
+                name=_truncate(fac.get("name"), 256, "Unknown Faction"),
                 ideology=fac.get("ideology", ""),
-                power_level=fac.get("power_level", "moderate"),
-                territory=fac.get("territory", ""),
+                power_level=_normalize_power_level(fac.get("power_level", "moderate")),
+                territory=_truncate(fac.get("territory"), 256, ""),
                 era_start=era_start,
                 era_end=era_end if era_end is not None else None,
             )
@@ -181,14 +234,19 @@ class LoreAgent(BaseAgent):
             if not isinstance(evt, dict):
                 continue
             evt_id = f"evt_{uuid.uuid4().hex[:12]}"
+            impact_raw = evt.get("impact", "moderate")
+            description = evt.get("description", "")
+            if isinstance(impact_raw, str) and len(impact_raw) > 32 and impact_raw not in description:
+                description = f"{description}\n\n{impact_raw}".strip() if description else impact_raw
+
             event = Event(
                 id=evt_id,
                 universe_id=universe_id,
-                title=evt.get("title", "Unknown Event"),
-                description=evt.get("description", ""),
+                title=_truncate(evt.get("title"), 256, "Unknown Event"),
+                description=description,
                 era_year=_parse_era(evt.get("era_year"), fallback_era),
-                event_type=evt.get("event_type", "historical"),
-                impact=evt.get("impact", "moderate"),
+                event_type=_normalize_event_type(evt.get("event_type", "historical")),
+                impact=_normalize_impact(impact_raw),
             )
             self.session.add(event)
             created["events"].append(evt_id)
@@ -211,6 +269,85 @@ class LoreAgent(BaseAgent):
 
         return created
 
+    async def _load_lore_json(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        *,
+        max_tokens: int = 2500,
+    ) -> dict[str, Any]:
+        try:
+            return await self.llm.complete_json(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                max_tokens=max_tokens,
+            )
+        except (LLMError, LLMJSONError) as exc:
+            logger.warning("lore LLM failed, using demo fallback: %s", exc)
+            raw = get_demo_response("universe_lore", user_prompt)
+            return json.loads(raw)
+
+    def _needs_lore_fallback(self, created: dict[str, list]) -> bool:
+        return not (
+            created.get("factions")
+            and created.get("locations")
+            and created.get("timeline")
+        )
+
+    async def _merge_demo_lore(
+        self,
+        universe_id: str,
+        prompt: str,
+        embed_svc: EmbeddingService,
+        existing: dict[str, list],
+    ) -> dict[str, list]:
+        """Fill missing factions/locations/timeline from demo template when LLM output was sparse."""
+        raw = get_demo_response("universe_lore", prompt)
+        fallback = json.loads(raw)
+
+        faction_names = {
+            f.name
+            for f in (
+                await self.session.execute(select(Faction).where(Faction.universe_id == universe_id))
+            ).scalars().all()
+        }
+        location_names = {
+            loc.name
+            for loc in (
+                await self.session.execute(select(Location).where(Location.universe_id == universe_id))
+            ).scalars().all()
+        }
+        timeline_labels = {
+            t.label
+            for t in (
+                await self.session.execute(select(TimelineEntry).where(TimelineEntry.universe_id == universe_id))
+            ).scalars().all()
+        }
+
+        filtered: dict[str, Any] = {"overview": fallback.get("overview", "")}
+        if not existing.get("factions"):
+            filtered["factions"] = [
+                f for f in fallback.get("factions", [])
+                if isinstance(f, dict) and f.get("name") not in faction_names
+            ]
+        if not existing.get("locations"):
+            filtered["locations"] = [
+                loc for loc in fallback.get("locations", [])
+                if isinstance(loc, dict) and loc.get("name") not in location_names
+            ]
+        if not existing.get("timeline"):
+            filtered["timeline"] = [
+                tl for tl in fallback.get("timeline", [])
+                if isinstance(tl, dict) and tl.get("label") not in timeline_labels
+            ]
+        if not existing.get("events"):
+            filtered["events"] = fallback.get("events", [])
+
+        merged = await self._persist_lore(universe_id, filtered, embed_svc)
+        for key in existing:
+            existing[key] = existing.get(key, []) + merged.get(key, [])
+        return existing
+
     async def run(self, context: dict[str, Any]) -> dict[str, Any]:
         universe_id = context["universe_id"]
         prompt = context.get("prompt", "")
@@ -225,14 +362,14 @@ class LoreAgent(BaseAgent):
             system_prompt, _ = self._expand_prompts(focus, genre, style, audience)
 
             try:
-                data = await self.llm.complete_json(
+                data = await self._load_lore_json(
                     system_prompt=system_prompt,
                     user_prompt=(
                         f"Expansion request: {prompt}\n\n"
                         f"Focus area: {focus}\n\n"
                         f"Existing world (do not duplicate these names):\n{existing}"
                     ),
-                    max_tokens=1200,
+                    max_tokens=1800,
                 )
             except (LLMError, LLMJSONError) as exc:
                 logger.exception("lore expand LLM call failed")
@@ -278,42 +415,52 @@ class LoreAgent(BaseAgent):
                 ),
             }
 
-        try:
-            data = await self.llm.complete_json(
-                system_prompt=(
-                    f"You are a world-building expert. Generate concise {genre} world lore "
-                    f"in a {style} style for a {audience} audience. "
-                    "Be brief: 1-2 sentences per field, max 3 items per array. "
-                    f"Always include {_FACTION_SCHEMA}."
-                ),
-                user_prompt=(
-                    f"Create world lore for: {prompt}. "
-                    f"Return JSON with: {_LORE_JSON_FIELDS}."
-                ),
-            )
-        except (LLMError, LLMJSONError) as exc:
-            logger.exception("lore LLM call failed")
-            return {
-                "error": str(exc),
-                "overview": "",
-                "created": {"locations": [], "factions": [], "events": []},
-                "reasoning": self.reasoning_step(
-                    f"Generating lore for {universe_id}",
-                    "LLM call failed",
-                    str(exc),
-                ),
-            }
+        system_prompt = (
+            f"You are a world-building expert. Generate {genre} world lore "
+            f"in a {style} style for a {audience} audience. "
+            "Return valid JSON only. Requirements:\n"
+            "- overview: 2-3 sentences setting the world\n"
+            "- locations: at least 3 entries with name, type, description\n"
+            f"- {_FACTION_SCHEMA}\n"
+            "- events: at least 2 with title, description, era_year, event_type (short slug e.g. war/founding), "
+            "impact (ONLY one of: critical, major, moderate, minor — not a sentence)\n"
+            "- timeline: at least 3 eras with era_year and label\n"
+            "- religions: 1 entry, magic_systems: 1 entry"
+        )
+        user_prompt = (
+            f"Create world lore for: {prompt}\n"
+            f"Return JSON with keys: {_LORE_JSON_FIELDS}."
+        )
+
+        data = await self._load_lore_json(system_prompt, user_prompt, max_tokens=2800)
 
         embed_svc = EmbeddingService(self.session)
         created = await self._persist_lore(universe_id, data, embed_svc)
+
+        if self._needs_lore_fallback(created):
+            logger.info("lore sparse after LLM — merging demo fallback entities")
+            created = await self._merge_demo_lore(universe_id, prompt, embed_svc, created)
+            if not data.get("overview"):
+                data["overview"] = json.loads(get_demo_response("universe_lore", prompt)).get("overview", "")
+
+        overview = data.get("overview", "")
+        if overview:
+            universe = await self.session.get(Universe, universe_id)
+            if universe and not universe.overview:
+                universe.overview = overview
+
         await self.session.commit()
 
         return {
-            "overview": data.get("overview", ""),
+            "overview": overview,
             "created": created,
             "reasoning": self.reasoning_step(
                 f"Generating lore for universe {universe_id}",
                 "Created locations, factions, events, religions, magic, timeline",
-                f"Created {len(created['locations'])} locations, {len(created['factions'])} factions",
+                (
+                    f"Created {len(created['locations'])} locations, "
+                    f"{len(created['factions'])} factions, "
+                    f"{len(created['timeline'])} timeline eras"
+                ),
             ),
         }

@@ -3,9 +3,9 @@
 import Link from "next/link";
 import { Swords } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { PollinationsImage } from "@/components/ui/PollinationsImage";
+import { DicebearEmblem } from "@/components/ui/DicebearEmblem";
 import type { Faction } from "@/lib/api";
-import { factionEmblemPrompt, pollinationsEmblemUrl } from "@/lib/visual-prompts";
+import type { UniverseVisualContext } from "@/lib/visual-prompts";
 
 function powerColor(level: string) {
   const l = level.toLowerCase();
@@ -17,12 +17,12 @@ function powerColor(level: string) {
 export function FactionPreview({
   universeId,
   factions,
-  genre,
+  visualContext: _visualContext,
   memberCounts,
 }: {
   universeId: string;
   factions: Faction[];
-  genre: string;
+  visualContext: UniverseVisualContext;
   memberCounts: Record<string, number>;
 }) {
   const preview = factions.slice(0, 3);
@@ -49,11 +49,11 @@ export function FactionPreview({
               href={`/universe/${universeId}/factions/${fac.id}`}
               className="group flex gap-3 rounded-xl border border-white/10 bg-white/5 p-4 transition-all hover:border-amber-500/30"
             >
-              <PollinationsImage
-                src={pollinationsEmblemUrl(factionEmblemPrompt(fac, genre), fac.id)}
+              <DicebearEmblem
+                seed={fac.id}
                 alt={`${fac.name} emblem`}
                 className="h-14 w-14 shrink-0 rounded-lg"
-                fallbackClassName="h-14 w-14 rounded-lg"
+                size={112}
               />
               <div className="min-w-0 flex-1">
                 <div className="flex items-start justify-between gap-2">

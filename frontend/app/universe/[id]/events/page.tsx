@@ -4,14 +4,15 @@ import React from "react";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { Calendar, Clock } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { EventCard } from "@/components/events/EventCard";
 import { WorldEmptyState } from "@/components/universe/WorldEmptyState";
 import { api } from "@/lib/api";
+import { toVisualContext } from "@/lib/visual-prompts";
 
 export default function EventsPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = React.use(params);
+  const { data: universe } = useQuery({ queryKey: ["universe", id], queryFn: () => api.getUniverse(id) });
   const { data: events, isLoading } = useQuery({
     queryKey: ["events", id],
     queryFn: () => api.getEvents(id),
@@ -20,6 +21,7 @@ export default function EventsPage({ params }: { params: Promise<{ id: string }>
   if (isLoading) return <div className="animate-pulse h-48 rounded-2xl bg-white/5" />;
 
   const sorted = [...(events ?? [])].sort((a, b) => a.era_year - b.era_year);
+  const visualContext = universe ? toVisualContext(universe) : null;
 
   return (
     <div className="space-y-6">
@@ -51,25 +53,13 @@ export default function EventsPage({ params }: { params: Promise<{ id: string }>
         />
       ) : (
         <div className="relative space-y-4 pl-6 before:absolute before:left-[11px] before:top-2 before:bottom-2 before:w-px before:bg-gradient-to-b before:from-blue-500/50 before:via-violet-500/30 before:to-transparent">
-          {sorted.map((evt) => (
-            <Card key={evt.id} className="relative border-white/10 bg-white/[0.02]">
-              <div className="absolute -left-6 top-6 h-3 w-3 rounded-full border-2 border-blue-400 bg-slate-950" />
-              <CardHeader>
-                <div className="flex items-start justify-between gap-2">
-                  <CardTitle>{evt.title}</CardTitle>
-                  <Badge variant="outline" className="border-blue-500/30 text-blue-300 shrink-0">
-                    Year {evt.era_year}
-                  </Badge>
-                </div>
-                <CardDescription>{evt.description}</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-white/50">
-                  {evt.event_type} · {evt.impact} impact
-                </p>
-              </CardContent>
-            </Card>
-          ))}
+          {visualContext &&
+            sorted.map((evt) => (
+              <div key={evt.id} className="relative">
+                <div className="absolute -left-6 top-8 h-3 w-3 rounded-full border-2 border-blue-400 bg-slate-950" />
+                <EventCard event={evt} visualContext={visualContext} />
+              </div>
+            ))}
         </div>
       )}
     </div>

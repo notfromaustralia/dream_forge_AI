@@ -2,9 +2,19 @@
 
 import Link from "next/link";
 import { Clock } from "lucide-react";
+import { EntityBanner } from "@/components/ui/EntityBanner";
 import type { TimelineEntry } from "@/lib/api";
+import type { UniverseVisualContext } from "@/lib/visual-prompts";
 
-export function TimelinePulse({ universeId, entries }: { universeId: string; entries: TimelineEntry[] }) {
+export function TimelinePulse({
+  universeId,
+  entries,
+  visualContext,
+}: {
+  universeId: string;
+  entries: TimelineEntry[];
+  visualContext: UniverseVisualContext;
+}) {
   if (!entries.length) return null;
 
   const sorted = [...entries].sort((a, b) => a.era_year - b.era_year);
@@ -27,7 +37,18 @@ export function TimelinePulse({ universeId, entries }: { universeId: string; ent
             href={`/universe/${universeId}/timeline`}
             className="relative z-10 flex min-w-[100px] flex-col items-center px-3"
           >
-            <div className="h-3 w-3 rounded-full border-2 border-cyan-400 bg-slate-950 shadow-[0_0_8px_rgba(34,211,238,0.6)]" />
+            <div className="relative h-12 w-16 overflow-hidden rounded-md ring-2 ring-cyan-500/40">
+              <EntityBanner
+                seed={entry.id}
+                variant="era"
+                title={entry.label}
+                subtitle={String(entry.era_year)}
+                genre={visualContext.genre}
+                style={visualContext.style}
+                className="h-full w-full"
+                compact
+              />
+            </div>
             <span className="mt-2 text-xs font-mono text-cyan-300">{entry.era_year}</span>
             <span className="mt-0.5 max-w-[90px] truncate text-[10px] text-white/40">{entry.label}</span>
             {i < sorted.length - 1 && <span className="sr-only">→</span>}

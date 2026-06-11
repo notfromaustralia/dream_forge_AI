@@ -96,7 +96,7 @@ export function ForgeMorePanel({ universeId }: { universeId: string }) {
   ];
 
   return (
-    <Card className="border-violet-500/20 bg-violet-500/5" id="forge-more">
+    <Card className="scroll-mt-24 border-violet-500/20 bg-violet-500/5" id="forge-more">
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-lg">
           <Sparkles className="h-5 w-5 text-violet-400" /> Forge More

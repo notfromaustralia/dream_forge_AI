@@ -6,6 +6,7 @@ import { Swords } from "lucide-react";
 import { FactionCard } from "@/components/factions/FactionCard";
 import { WorldEmptyState } from "@/components/universe/WorldEmptyState";
 import { api } from "@/lib/api";
+import { toVisualContext } from "@/lib/visual-prompts";
 
 export default function FactionsPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = React.use(params);
@@ -50,18 +51,20 @@ export default function FactionsPage({ params }: { params: Promise<{ id: string 
           borderClass="border-amber-500/20"
           bgClass="bg-amber-500/5"
         />
-      ) : (
+      ) : universe ? (
         <div className="grid gap-4 md:grid-cols-2">
           {factions.map((fac) => (
             <FactionCard
               key={fac.id}
               faction={fac}
               universeId={id}
-              genre={universe?.genre ?? "fantasy"}
+              visualContext={toVisualContext(universe)}
               memberCount={memberCounts[fac.id] ?? 0}
             />
           ))}
         </div>
+      ) : (
+        <div className="animate-pulse h-48 rounded-2xl bg-white/5" />
       )}
     </div>
   );

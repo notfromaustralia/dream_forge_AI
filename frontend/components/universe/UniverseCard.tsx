@@ -2,18 +2,15 @@
 
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { Globe, MapPin, MoreVertical, Swords, Users } from "lucide-react";
+import { Globe, MapPin, Swords, Users } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { DeleteUniverseDialog } from "@/components/universe/DeleteUniverseDialog";
-import { PollinationsImage } from "@/components/ui/PollinationsImage";
+import { EntityBanner } from "@/components/ui/EntityBanner";
+import { UniverseActionsMenu } from "@/components/universe/UniverseActionsMenu";
 import type { Universe } from "@/lib/api";
-import { pollinationsBannerUrl, universeBannerPrompt } from "@/lib/visual-prompts";
 
 export function UniverseCard({ universe, index }: { universe: Universe; index: number }) {
   const counts = universe.entity_counts;
-  const bannerSrc = pollinationsBannerUrl(universeBannerPrompt(universe), universe.id);
 
   return (
     <motion.div
@@ -25,13 +22,17 @@ export function UniverseCard({ universe, index }: { universe: Universe; index: n
       <Link href={`/universe/${universe.id}/overview`}>
         <Card className="overflow-hidden cursor-pointer transition-all hover:border-violet-500/30 hover:shadow-violet-500/10 hover:shadow-2xl">
           <div className="relative h-28">
-            <PollinationsImage
-              src={bannerSrc}
-              alt=""
+            <EntityBanner
+              seed={universe.id}
+              variant="universe"
+              title={universe.name}
+              subtitle={universe.genre}
+              genre={universe.genre}
+              style={universe.style}
               className="h-full"
-              fallbackClassName="h-full"
+              compact
             />
-            <div className="absolute inset-0 bg-gradient-to-t from-slate-950 to-transparent" />
+            <div className="absolute inset-0 bg-gradient-to-t from-slate-950 to-transparent pointer-events-none" />
           </div>
           <CardHeader className="relative -mt-4">
             <div className="flex items-start justify-between">
@@ -53,14 +54,11 @@ export function UniverseCard({ universe, index }: { universe: Universe; index: n
         </Card>
       </Link>
       <div className="absolute right-3 top-3 z-10" onClick={(e) => e.preventDefault()}>
-        <DeleteUniverseDialog
+        <UniverseActionsMenu
           universeId={universe.id}
           universeName={universe.name}
-          trigger={
-            <Button variant="outline" size="icon" className="h-8 w-8 border-white/20 bg-slate-950/80 backdrop-blur">
-              <MoreVertical className="h-4 w-4" />
-            </Button>
-          }
+          overview={universe.overview}
+          triggerClassName="h-8 w-8 border-white/20 bg-slate-950/80 backdrop-blur"
         />
       </div>
     </motion.div>

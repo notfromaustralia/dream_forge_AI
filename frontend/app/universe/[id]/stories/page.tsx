@@ -7,6 +7,7 @@ import { Loader2, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { StoryCard } from "@/components/stories/StoryCard";
 import { api } from "@/lib/api";
+import { toVisualContext } from "@/lib/visual-prompts";
 import { toast } from "sonner";
 
 export default function StoriesPage({ params }: { params: Promise<{ id: string }> }) {
@@ -20,6 +21,7 @@ export default function StoriesPage({ params }: { params: Promise<{ id: string }
     queryKey: ["stories", id],
     queryFn: () => api.getStories(id),
   });
+  const { data: universe } = useQuery({ queryKey: ["universe", id], queryFn: () => api.getUniverse(id) });
   const { data: factions } = useQuery({
     queryKey: ["factions", id],
     queryFn: () => api.getFactions(id),
@@ -106,11 +108,12 @@ export default function StoriesPage({ params }: { params: Promise<{ id: string }
       )}
 
       <div className="grid gap-6 md:grid-cols-2">
-        {stories?.map((story, i) => (
-          <Link key={story.id} href={`/universe/${id}/stories/${story.id}`}>
-            <StoryCard story={story} index={i} />
-          </Link>
-        ))}
+        {universe &&
+          stories?.map((story, i) => (
+            <Link key={story.id} href={`/universe/${id}/stories/${story.id}`}>
+              <StoryCard story={story} visualContext={toVisualContext(universe)} index={i} />
+            </Link>
+          ))}
       </div>
     </div>
   );

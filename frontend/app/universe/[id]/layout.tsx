@@ -2,11 +2,9 @@
 
 import React from "react";
 import { useQuery } from "@tanstack/react-query";
-import { MoreVertical } from "lucide-react";
 import { Navbar } from "@/components/layout/Navbar";
-import { DeleteUniverseDialog } from "@/components/universe/DeleteUniverseDialog";
+import { UniverseActionsMenu } from "@/components/universe/UniverseActionsMenu";
 import { WorkspaceNav } from "@/components/universe/WorkspaceNav";
-import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 
 export default function UniverseLayout({
@@ -49,14 +47,10 @@ export default function UniverseLayout({
                 </h1>
                 <p className="text-sm text-white/50">{universe.genre} · {universe.style}</p>
               </div>
-              <DeleteUniverseDialog
+              <UniverseActionsMenu
                 universeId={resolvedParams.id}
                 universeName={universe.name}
-                trigger={
-                  <Button variant="outline" size="icon" className="shrink-0 border-white/10">
-                    <MoreVertical className="h-4 w-4" />
-                  </Button>
-                }
+                overview={universe.overview}
               />
             </div>
           )}

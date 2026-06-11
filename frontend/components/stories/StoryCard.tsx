@@ -24,30 +24,39 @@ import {
   type ParsedDialogue,
   type ParsedPlain,
 } from "@/lib/story-parser";
-import { dicebearAvatarUrl, pollinationsBannerUrl, storyBannerPrompt } from "@/lib/visual-prompts";
+import { EntityBanner } from "@/components/ui/EntityBanner";
+import { dicebearAvatarUrl } from "@/lib/entity-art";
+import type { UniverseVisualContext } from "@/lib/visual-prompts";
 
 type StoryCardProps = {
   story: Story;
+  visualContext: UniverseVisualContext;
   index?: number;
   expanded?: boolean;
   hideBanner?: boolean;
 };
 
-function Banner({ story, parsed }: { story: Story; parsed: ParsedContent }) {
-  const [errored, setErrored] = useState(false);
-  if (errored) {
-    return <div className="h-40 rounded-t-2xl bg-gradient-to-br from-violet-900/40 to-cyan-900/20" />;
-  }
+function Banner({
+  story,
+  parsed,
+  visualContext,
+}: {
+  story: Story;
+  parsed: ParsedContent;
+  visualContext: UniverseVisualContext;
+}) {
   return (
     <div className="relative h-40 overflow-hidden rounded-t-2xl">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={pollinationsBannerUrl(storyBannerPrompt(parsed), story.id)}
-        alt=""
-        className="h-full w-full object-cover"
-        onError={() => setErrored(true)}
+      <EntityBanner
+        seed={story.id}
+        variant="story"
+        title={parsed.title}
+        subtitle={story.arc_type}
+        genre={visualContext.genre}
+        style={visualContext.style}
+        className="h-full"
       />
-      <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-transparent" />
+      <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-transparent pointer-events-none" />
     </div>
   );
 }
@@ -209,7 +218,13 @@ function PlainBody({ parsed }: { parsed: ParsedPlain }) {
   return <p className="text-sm text-white/70 whitespace-pre-wrap">{parsed.text}</p>;
 }
 
-export function StoryCard({ story, index = 0, expanded: expandedProp, hideBanner = false }: StoryCardProps) {
+export function StoryCard({
+  story,
+  visualContext,
+  index = 0,
+  expanded: expandedProp,
+  hideBanner = false,
+}: StoryCardProps) {
   const [expandedState, setExpandedState] = useState(false);
   const expanded = expandedProp ?? expandedState;
   const parsed = parseStoryContent(story.title, story.synopsis, story.content_json);
@@ -230,7 +245,7 @@ export function StoryCard({ story, index = 0, expanded: expandedProp, hideBanner
       transition={{ delay: index * 0.05 }}
     >
       <Card className="overflow-hidden border-white/10 bg-white/5">
-        {!hideBanner && <Banner story={story} parsed={parsed} />}
+        {!hideBanner && <Banner story={story} parsed={parsed} visualContext={visualContext} />}
         <CardContent className="p-5">
           <div className={`mb-4 flex items-start justify-between gap-2 ${hideBanner ? "" : ""}`}>
             <div className="flex items-start gap-2">

@@ -5,11 +5,11 @@ import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { PollinationsImage } from "@/components/ui/PollinationsImage";
+import { EntityBanner } from "@/components/ui/EntityBanner";
 import { StoryCard } from "@/components/stories/StoryCard";
 import { api } from "@/lib/api";
 import { parseStoryContent } from "@/lib/story-parser";
-import { pollinationsBannerUrl, storyBannerPrompt } from "@/lib/visual-prompts";
+import { toVisualContext } from "@/lib/visual-prompts";
 
 const ARC_COLORS: Record<string, string> = {
   main: "border-violet-500/40 text-violet-300 bg-violet-500/10",
@@ -23,17 +23,18 @@ export default function StoryDetailPage({
   params: Promise<{ id: string; storyId: string }>;
 }) {
   const { id, storyId } = React.use(params);
+  const { data: universe } = useQuery({ queryKey: ["universe", id], queryFn: () => api.getUniverse(id) });
   const { data: story, isLoading } = useQuery({
     queryKey: ["story", id, storyId],
     queryFn: () => api.getStory(id, storyId),
   });
 
-  if (isLoading || !story) {
+  if (isLoading || !story || !universe) {
     return <div className="animate-pulse h-96 rounded-2xl bg-white/5" />;
   }
 
+  const visualContext = toVisualContext(universe);
   const parsed = parseStoryContent(story.title, story.synopsis, story.content_json);
-  const bannerSrc = pollinationsBannerUrl(storyBannerPrompt(parsed), story.id);
   const arcLabel = story.arc_type === "side" ? "Side Quest" : story.arc_type === "scene" ? "Scene" : "Main Arc";
 
   return (
@@ -43,8 +44,16 @@ export default function StoryDetailPage({
       </Link>
 
       <div className="relative overflow-hidden rounded-2xl border border-white/10">
-        <PollinationsImage src={bannerSrc} alt={story.title} className="h-56 md:h-80" fallbackClassName="h-56 md:h-80" />
-        <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-transparent" />
+        <EntityBanner
+          seed={story.id}
+          variant="story"
+          title={parsed.title}
+          subtitle={arcLabel}
+          genre={visualContext.genre}
+          style={visualContext.style}
+          className="h-56 md:h-80"
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-transparent pointer-events-none" />
         <div className="absolute bottom-0 left-0 right-0 p-6 md:p-8">
           <Badge variant="outline" className={`mb-3 ${ARC_COLORS[story.arc_type] ?? ARC_COLORS.main}`}>
             {arcLabel}
@@ -58,7 +67,7 @@ export default function StoryDetailPage({
         </div>
       </div>
 
-      <StoryCard story={story} expanded hideBanner />
+      <StoryCard story={story} visualContext={visualContext} expanded hideBanner />
     </div>
   );
 }

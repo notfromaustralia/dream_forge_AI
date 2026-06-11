@@ -5,11 +5,27 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Clock, Zap } from "lucide-react";
 import { Slider } from "@/components/ui/slider";
 import { Badge } from "@/components/ui/badge";
-import { PollinationsImage } from "@/components/ui/PollinationsImage";
+import { EntityBanner } from "@/components/ui/EntityBanner";
 import { api, type TimelineEntry, type TimelineState } from "@/lib/api";
-import { eraScenePrompt, pollinationsBannerUrl } from "@/lib/visual-prompts";
+import type { UniverseVisualContext } from "@/lib/visual-prompts";
 
-export function TimeMachine({ universeId, genre = "fantasy" }: { universeId: string; genre?: string }) {
+const DEFAULT_CONTEXT: UniverseVisualContext = {
+  name: "",
+  genre: "fantasy",
+  style: "cinematic",
+  audience: "general",
+  overview: "",
+  prompt: "",
+};
+
+export function TimeMachine({
+  universeId,
+  visualContext,
+}: {
+  universeId: string;
+  visualContext?: UniverseVisualContext;
+}) {
+  const ctx = visualContext ?? DEFAULT_CONTEXT;
   const [entries, setEntries] = useState<TimelineEntry[]>([]);
   const [era, setEra] = useState<number | null>(null);
   const [state, setState] = useState<TimelineState | null>(null);
@@ -35,13 +51,13 @@ export function TimeMachine({ universeId, genre = "fantasy" }: { universeId: str
   const maxYear = entries.length ? Math.max(...entries.map((e) => e.era_year)) : 1000;
   const eraLabel = entries.find((e) => e.era_year === era)?.label ?? "Unknown Era";
 
-  const backdropSrc = useMemo(() => {
-    if (era === null) return "";
-    const events = state?.events.map((e) => ({ title: e.title, description: e.description })) ?? [];
-    return pollinationsBannerUrl(eraScenePrompt(era, eraLabel, events, genre), `era-${universeId}-${era}`);
-  }, [era, eraLabel, genre, state?.events, universeId]);
+  const newEventIds = useMemo(() => {
+    if (!state || !prevState) return new Set<string>();
+    const prev = new Set(prevState.events.map((e) => e.id));
+    return new Set(state.events.filter((e) => !prev.has(e.id)).map((e) => e.id));
+  }, [state, prevState]);
 
-  if (era === null) {
+  if (entries.length === 0) {
     return (
       <div className="rounded-2xl border border-dashed border-cyan-500/20 bg-cyan-500/5 p-12 text-center">
         <Clock className="mx-auto h-12 w-12 text-cyan-400/40" />
@@ -53,17 +69,23 @@ export function TimeMachine({ universeId, genre = "fantasy" }: { universeId: str
     );
   }
 
-  const newEventIds = useMemo(() => {
-    if (!state || !prevState) return new Set<string>();
-    const prev = new Set(prevState.events.map((e) => e.id));
-    return new Set(state.events.filter((e) => !prev.has(e.id)).map((e) => e.id));
-  }, [state, prevState]);
+  if (era === null) {
+    return <div className="animate-pulse h-96 rounded-2xl bg-white/5" />;
+  }
 
   return (
     <div className="space-y-6">
       <div className="time-machine-panel relative overflow-hidden rounded-2xl border border-cyan-500/30 bg-slate-950/80 shadow-[0_0_40px_rgba(6,182,212,0.15)]">
-        <div className="absolute inset-0 opacity-30">
-          <PollinationsImage src={backdropSrc} alt="" className="h-full min-h-[320px]" fallbackClassName="h-full min-h-[320px]" />
+        <div className="absolute inset-0 opacity-50">
+          <EntityBanner
+            seed={`era-${universeId}-${era}`}
+            variant="era"
+            title={eraLabel}
+            subtitle={`Year ${era}`}
+            genre={ctx.genre}
+            style={ctx.style}
+            className="h-full min-h-[320px]"
+          />
         </div>
         <div className="time-machine-scanlines absolute inset-0 pointer-events-none" />
 

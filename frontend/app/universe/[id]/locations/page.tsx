@@ -6,6 +6,7 @@ import { Compass, MapPin } from "lucide-react";
 import { LocationCard } from "@/components/locations/LocationCard";
 import { WorldEmptyState } from "@/components/universe/WorldEmptyState";
 import { api } from "@/lib/api";
+import { toVisualContext } from "@/lib/visual-prompts";
 
 export default function LocationsPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = React.use(params);
@@ -17,7 +18,7 @@ export default function LocationsPage({ params }: { params: Promise<{ id: string
 
   if (isLoading) return <div className="animate-pulse h-48 rounded-2xl bg-white/5" />;
 
-  const genre = universe?.genre ?? "fantasy";
+  const visualContext = universe ? toVisualContext(universe) : null;
 
   return (
     <div className="space-y-6">
@@ -53,9 +54,10 @@ export default function LocationsPage({ params }: { params: Promise<{ id: string
         />
       ) : (
         <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
-          {locations.map((loc) => (
-            <LocationCard key={loc.id} location={loc} genre={genre} />
-          ))}
+          {visualContext &&
+            locations.map((loc) => (
+              <LocationCard key={loc.id} location={loc} visualContext={visualContext} />
+            ))}
         </div>
       )}
     </div>

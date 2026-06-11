@@ -6,10 +6,10 @@ import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, MapPin, Swords, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { PollinationsImage } from "@/components/ui/PollinationsImage";
+import { EntityBanner } from "@/components/ui/EntityBanner";
 import { CharacterCard } from "@/components/characters/CharacterCard";
 import { api } from "@/lib/api";
-import { factionBannerPrompt, pollinationsBannerUrl } from "@/lib/visual-prompts";
+import { toVisualContext } from "@/lib/visual-prompts";
 
 export default function FactionDetailPage({
   params,
@@ -33,8 +33,7 @@ export default function FactionDetailPage({
     return <div className="animate-pulse h-96 rounded-2xl bg-white/5" />;
   }
 
-  const genre = universe?.genre ?? "fantasy";
-  const bannerSrc = pollinationsBannerUrl(factionBannerPrompt(faction, genre), faction.id);
+  const visualContext = universe ? toVisualContext(universe) : null;
 
   return (
     <div className="space-y-6">
@@ -43,8 +42,18 @@ export default function FactionDetailPage({
       </Link>
 
       <div className="relative overflow-hidden rounded-2xl border border-white/10">
-        <PollinationsImage src={bannerSrc} alt={faction.name} className="h-48 md:h-64" fallbackClassName="h-48 md:h-64" />
-        <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/50 to-transparent" />
+        {visualContext && (
+          <EntityBanner
+            seed={faction.id}
+            variant="faction"
+            title={faction.name}
+            subtitle={faction.power_level}
+            genre={visualContext.genre}
+            style={visualContext.style}
+            className="h-48 md:h-64"
+          />
+        )}
+        <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/50 to-transparent pointer-events-none" />
         <div className="absolute bottom-0 left-0 right-0 p-6">
           <div className="flex items-center gap-2 mb-2">
             <Swords className="h-5 w-5 text-amber-400" />
@@ -85,7 +94,12 @@ export default function FactionDetailPage({
             ) : (
               <div className="grid gap-4 md:grid-cols-2">
                 {members.map((char) => (
-                  <CharacterCard key={char.id} character={char} universeId={id} />
+                  <CharacterCard
+                    key={char.id}
+                    character={char}
+                    universeId={id}
+                    visualContext={visualContext ?? undefined}
+                  />
                 ))}
               </div>
             )}

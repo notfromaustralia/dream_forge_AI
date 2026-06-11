@@ -3,9 +3,9 @@
 import { Building2, Castle, MapPin, Mountain, Trees, Waves } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { PollinationsImage } from "@/components/ui/PollinationsImage";
+import { EntityBanner } from "@/components/ui/EntityBanner";
 import type { Location } from "@/lib/api";
-import { locationScenePrompt, pollinationsBannerUrl } from "@/lib/visual-prompts";
+import type { UniverseVisualContext } from "@/lib/visual-prompts";
 
 function typeIcon(type: string) {
   const t = type.toLowerCase();
@@ -27,27 +27,27 @@ function typeColor(type: string) {
 
 export function LocationCard({
   location,
-  genre,
+  visualContext,
 }: {
   location: Location;
-  genre: string;
+  visualContext: UniverseVisualContext;
 }) {
   const Icon = typeIcon(location.location_type);
-  const bannerSrc = pollinationsBannerUrl(
-    locationScenePrompt(location, genre),
-    location.id
-  );
 
   return (
     <Card className="group overflow-hidden transition-all hover:border-emerald-500/30 hover:shadow-emerald-500/5 hover:shadow-lg">
       <div className="relative h-36">
-        <PollinationsImage
-          src={bannerSrc}
-          alt={location.name}
+        <EntityBanner
+          seed={location.id}
+          variant="location"
+          title={location.name}
+          subtitle={location.location_type}
+          genre={visualContext.genre}
+          style={visualContext.style}
+          icon={Icon}
           className="h-full"
-          fallbackClassName="h-full bg-gradient-to-br from-emerald-950/60 to-cyan-950/40"
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/30 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/30 to-transparent pointer-events-none" />
         <div className="absolute bottom-3 left-3 flex items-center gap-2">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-emerald-500/30 bg-slate-950/80">
             <Icon className="h-4 w-4 text-emerald-400" />

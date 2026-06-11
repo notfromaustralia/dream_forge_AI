@@ -4,9 +4,10 @@ import Link from "next/link";
 import { Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { PollinationsImage } from "@/components/ui/PollinationsImage";
+import { DicebearEmblem } from "@/components/ui/DicebearEmblem";
+import { EntityBanner } from "@/components/ui/EntityBanner";
 import type { Faction } from "@/lib/api";
-import { factionEmblemPrompt, pollinationsEmblemUrl } from "@/lib/visual-prompts";
+import type { UniverseVisualContext } from "@/lib/visual-prompts";
 
 function powerColor(level: string) {
   const l = level.toLowerCase();
@@ -18,23 +19,33 @@ function powerColor(level: string) {
 export function FactionCard({
   faction,
   universeId,
-  genre,
+  visualContext,
   memberCount = 0,
 }: {
   faction: Faction;
   universeId: string;
-  genre: string;
+  visualContext: UniverseVisualContext;
   memberCount?: number;
 }) {
   return (
     <Link href={`/universe/${universeId}/factions/${faction.id}`}>
-      <Card className="group h-full transition-all hover:border-amber-500/30 hover:shadow-amber-500/5 hover:shadow-lg">
+      <Card className="group h-full overflow-hidden transition-all hover:border-amber-500/30 hover:shadow-amber-500/5 hover:shadow-lg">
+        <EntityBanner
+          seed={`${faction.id}-banner`}
+          variant="faction"
+          title={faction.name}
+          subtitle={faction.power_level}
+          genre={visualContext.genre}
+          style={visualContext.style}
+          className="h-20"
+          compact
+        />
         <CardHeader className="flex flex-row gap-4">
-          <PollinationsImage
-            src={pollinationsEmblemUrl(factionEmblemPrompt(faction, genre), faction.id)}
+          <DicebearEmblem
+            seed={faction.id}
             alt={`${faction.name} emblem`}
-            className="h-16 w-16 shrink-0 rounded-xl"
-            fallbackClassName="h-16 w-16 rounded-xl"
+            className="h-16 w-16 shrink-0 -mt-10 relative z-10 ring-2 ring-slate-950"
+            size={128}
           />
           <div className="min-w-0 flex-1">
             <div className="flex items-start justify-between gap-2">

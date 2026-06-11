@@ -4,9 +4,11 @@ import React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { CharacterCard } from "@/components/characters/CharacterCard";
 import { api } from "@/lib/api";
+import { toVisualContext } from "@/lib/visual-prompts";
 
 export default function CharactersPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = React.use(params);
+  const { data: universe } = useQuery({ queryKey: ["universe", id], queryFn: () => api.getUniverse(id) });
   const { data: characters, isLoading } = useQuery({
     queryKey: ["characters", id],
     queryFn: () => api.getCharacters(id),
@@ -42,6 +44,7 @@ export default function CharactersPage({ params }: { params: Promise<{ id: strin
           key={char.id}
           character={char}
           universeId={id}
+          visualContext={universe ? toVisualContext(universe) : undefined}
           factionName={char.faction_id ? factionMap[char.faction_id] : undefined}
           locationName={char.location_id ? locationMap[char.location_id] : undefined}
         />

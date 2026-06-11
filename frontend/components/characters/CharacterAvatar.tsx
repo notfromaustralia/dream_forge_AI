@@ -3,12 +3,20 @@
 import { useState } from "react";
 import { Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { dicebearAvatarUrl, pollinationsPortraitUrl } from "@/lib/visual-prompts";
+import {
+  characterAvatarSeed,
+  dicebearPortraitUrl,
+  isPollinationsEnabled,
+  pollinationsImageUrl,
+} from "@/lib/entity-art";
+import { isCartoonStyle, type UniverseVisualContext } from "@/lib/visual-prompts";
 import type { Character } from "@/lib/api";
 
 type CharacterAvatarProps = {
   character: Character;
-  universeId: string;
+  visualContext?: UniverseVisualContext;
+  factionName?: string;
+  locationName?: string;
   size?: number;
   onGenerate?: () => Promise<void>;
   generating?: boolean;
@@ -16,6 +24,9 @@ type CharacterAvatarProps = {
 
 export function CharacterAvatar({
   character,
+  visualContext,
+  factionName,
+  locationName,
   size = 112,
   onGenerate,
   generating = false,
@@ -23,21 +34,27 @@ export function CharacterAvatar({
   const [imgError, setImgError] = useState(false);
   const [loaded, setLoaded] = useState(false);
 
-  const fallbackUrl = dicebearAvatarUrl(character.id);
-  const portraitUrl =
-    character.portrait_prompt && character.portrait_status === "ready"
-      ? pollinationsPortraitUrl(character.portrait_prompt, character.id)
+  const cartoon = visualContext ? isCartoonStyle(visualContext) : true;
+  const seed = characterAvatarSeed(character.id, character.name);
+
+  const enhancedUrl =
+    isPollinationsEnabled() &&
+    character.portrait_prompt &&
+    character.portrait_status === "ready" &&
+    !imgError
+      ? pollinationsImageUrl(character.portrait_prompt, character.id, size, size)
       : null;
 
-  const src = imgError || !portraitUrl ? fallbackUrl : portraitUrl;
-  const showGenerate = onGenerate && !character.portrait_prompt;
+  const src = enhancedUrl ?? dicebearPortraitUrl(seed, cartoon, size);
+  const usingEnhanced = Boolean(enhancedUrl);
+  const showGenerate = onGenerate && isPollinationsEnabled() && !character.portrait_prompt;
 
   return (
     <div className="group relative mx-auto" style={{ width: size, height: size }}>
       <div
         className={`absolute inset-0 rounded-full ring-2 ring-violet-500/40 ${
-          !loaded && portraitUrl ? "animate-pulse bg-violet-500/10" : ""
-        }`}
+          !loaded ? "animate-pulse bg-violet-500/10" : ""
+        } ${loaded ? "animate-[gentle-float_4s_ease-in-out_infinite]" : ""}`}
       />
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
@@ -48,7 +65,7 @@ export function CharacterAvatar({
         className="relative h-full w-full rounded-full object-cover ring-2 ring-violet-500/40"
         onLoad={() => setLoaded(true)}
         onError={() => {
-          setImgError(true);
+          if (usingEnhanced) setImgError(true);
           setLoaded(true);
         }}
       />
@@ -65,7 +82,7 @@ export function CharacterAvatar({
             }}
           >
             <Sparkles className="h-3 w-3" />
-            {generating ? "..." : "Portrait"}
+            {generating ? "..." : "Enhance"}
           </Button>
         </div>
       )}

@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     openai_base_url: str = "https://models.inference.ai.azure.com"
     ai_model: str = "gpt-4o-mini"
     github_token: str = ""
-    llm_max_tokens: int = 800
+    llm_max_tokens: int = 2000
     demo_user_id: str = "demo_user_001"
     cors_origins: str = "http://localhost:3000"
 

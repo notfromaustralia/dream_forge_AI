@@ -5,20 +5,34 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { EntityBanner } from "@/components/ui/EntityBanner";
 import { CharacterAvatar } from "./CharacterAvatar";
 import { api, type Character } from "@/lib/api";
-import { pollinationsPortraitUrl } from "@/lib/visual-prompts";
+import { toVisualContext, type UniverseVisualContext } from "@/lib/visual-prompts";
 
 type CharacterCardProps = {
   character: Character;
   universeId: string;
+  visualContext?: UniverseVisualContext;
   factionName?: string;
   locationName?: string;
 };
 
-export function CharacterCard({ character, universeId, factionName: factionNameProp, locationName: locationNameProp }: CharacterCardProps) {
+export function CharacterCard({
+  character,
+  universeId,
+  visualContext: visualContextProp,
+  factionName: factionNameProp,
+  locationName: locationNameProp,
+}: CharacterCardProps) {
   const [generating, setGenerating] = useState(false);
   const queryClient = useQueryClient();
+
+  const { data: universe } = useQuery({
+    queryKey: ["universe", universeId],
+    queryFn: () => api.getUniverse(universeId),
+    enabled: !visualContextProp,
+  });
 
   const { data: factions } = useQuery({
     queryKey: ["factions", universeId],
@@ -29,19 +43,15 @@ export function CharacterCard({ character, universeId, factionName: factionNameP
     queryFn: () => api.getLocations(universeId),
   });
 
+  const visualContext = visualContextProp ?? (universe ? toVisualContext(universe) : undefined);
   const factionName = factionNameProp ?? factions?.find((f) => f.id === character.faction_id)?.name;
   const locationName = locationNameProp ?? locations?.find((l) => l.id === character.location_id)?.name;
-
-  const bgPortrait =
-    character.portrait_prompt && character.portrait_status === "ready"
-      ? pollinationsPortraitUrl(character.portrait_prompt, character.id, 256)
-      : null;
 
   const handleGenerate = async () => {
     setGenerating(true);
     try {
       await api.generatePortrait(universeId, character.id);
-      toast.success(`Portrait generated for ${character.name}`);
+      toast.success(`Enhanced portrait for ${character.name}`);
       await queryClient.invalidateQueries({ queryKey: ["characters", universeId] });
     } catch {
       toast.error("Failed to generate portrait");
@@ -52,20 +62,24 @@ export function CharacterCard({ character, universeId, factionName: factionNameP
 
   return (
     <Card className="relative overflow-hidden border-white/10 bg-white/5">
-      {bgPortrait && (
-        <div
-          className="pointer-events-none absolute inset-0 opacity-[0.12] blur-2xl"
-          style={{
-            backgroundImage: `url(${bgPortrait})`,
-            backgroundSize: "cover",
-            backgroundPosition: "center top",
-          }}
+      {visualContext && (
+        <EntityBanner
+          seed={character.id}
+          variant="character"
+          title={character.name}
+          subtitle={character.story_importance}
+          genre={visualContext.genre}
+          style={visualContext.style}
+          className="h-20"
+          compact
         />
       )}
-      <CardHeader className="relative text-center">
+      <CardHeader className="relative -mt-8 text-center">
         <CharacterAvatar
           character={character}
-          universeId={universeId}
+          visualContext={visualContext}
+          factionName={factionName}
+          locationName={locationName}
           onGenerate={handleGenerate}
           generating={generating}
         />

@@ -9,6 +9,7 @@ import { TimelinePulse } from "@/components/universe/TimelinePulse";
 import { UniverseHero } from "@/components/universe/UniverseHero";
 import { Card, CardContent } from "@/components/ui/card";
 import { api } from "@/lib/api";
+import { toVisualContext } from "@/lib/visual-prompts";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 
@@ -49,14 +50,14 @@ export default function OverviewPage({ params }: { params: Promise<{ id: string 
       <FactionPreview
         universeId={id}
         factions={factions ?? []}
-        genre={universe.genre}
+        visualContext={toVisualContext(universe)}
         memberCounts={memberCounts}
       />
 
       {timeline && timeline.length > 0 && (
         <Card className="border-white/10 bg-white/[0.02]">
           <CardContent className="p-6">
-            <TimelinePulse universeId={id} entries={timeline} />
+            <TimelinePulse universeId={id} entries={timeline} visualContext={toVisualContext(universe)} />
           </CardContent>
         </Card>
       )}
