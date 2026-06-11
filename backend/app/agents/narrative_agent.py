@@ -7,13 +7,15 @@ import logging
 import uuid
 from typing import Any
 
+from sqlalchemy import select
+
 from app.agents.base import BaseAgent
 from app.agents.schemas import (
     DIALOGUE_SCHEMA_INSTRUCTION,
     QUEST_SCHEMA_INSTRUCTION,
     STORY_SCHEMA_INSTRUCTION,
 )
-from app.db.models import Story
+from app.db.models import Character, Event, Faction, Location, Story, Universe
 from app.services.embeddings import EmbeddingService
 from app.services.llm import LLMError, LLMJSONError
 
@@ -120,6 +122,50 @@ def _normalize_dialogue(data: dict[str, Any]) -> dict[str, Any]:
 class NarrativeAgent(BaseAgent):
     agent_id = "narrative"
 
+    async def _build_world_context(self, universe_id: str) -> str:
+        universe = await self.session.get(Universe, universe_id)
+        overview = universe.overview if universe else ""
+
+        factions = (
+            await self.session.execute(
+                select(Faction).where(Faction.universe_id == universe_id).limit(5)
+            )
+        ).scalars().all()
+        characters = (
+            await self.session.execute(
+                select(Character).where(Character.universe_id == universe_id).limit(5)
+            )
+        ).scalars().all()
+        locations = (
+            await self.session.execute(
+                select(Location).where(Location.universe_id == universe_id).limit(5)
+            )
+        ).scalars().all()
+        events = (
+            await self.session.execute(
+                select(Event)
+                .where(Event.universe_id == universe_id)
+                .order_by(Event.era_year.desc())
+                .limit(3)
+            )
+        ).scalars().all()
+
+        faction_lines = [
+            f"- {f.name} ({f.power_level}): {f.ideology[:120]}; territory: {f.territory}"
+            for f in factions
+        ]
+        char_lines = [f"- {c.name}: {c.bio[:100]}" for c in characters]
+        loc_lines = [f"- {loc.name}: {loc.description[:80]}" for loc in locations]
+        event_lines = [f"- {e.title} (year {e.era_year}): {e.description[:80]}" for e in events]
+
+        return (
+            f"World overview: {overview[:500]}\n"
+            f"Factions:\n{chr(10).join(faction_lines) or '- none'}\n"
+            f"Characters:\n{chr(10).join(char_lines) or '- none'}\n"
+            f"Locations:\n{chr(10).join(loc_lines) or '- none'}\n"
+            f"Recent events:\n{chr(10).join(event_lines) or '- none'}"
+        )
+
     async def run(self, context: dict[str, Any]) -> dict[str, Any]:
         universe_id = context["universe_id"]
         intent = context.get("intent", "story")
@@ -135,22 +181,34 @@ class NarrativeAgent(BaseAgent):
             normalize = _normalize_dialogue
             arc_type = "scene"
             max_tokens = 900
+        elif intent == "expand_story":
+            schema = STORY_SCHEMA_INSTRUCTION
+            normalize = _normalize_story
+            arc_type = "main"
+            max_tokens = 2200
         else:
             schema = STORY_SCHEMA_INSTRUCTION
             normalize = _normalize_story
             arc_type = "main"
             max_tokens = 2200
 
+        world_context = await self._build_world_context(universe_id)
+        prompt_with_context = (
+            f"{user_prompt or f'Generate a {intent}.'}\n\n"
+            f"--- Existing world context (stay consistent) ---\n{world_context}"
+        )
+
         system_prompt = (
             "You are a vivid storyteller. Generate narrative content as JSON. "
-            "Write actual prose — scenes, action, and dialogue — not just summaries.\n"
+            "Write actual prose — scenes, action, and dialogue — not just summaries. "
+            "Use the provided world context — reference real factions, characters, and locations.\n"
             + schema
         )
 
         try:
             raw = await self.llm.complete_json(
                 system_prompt=system_prompt,
-                user_prompt=user_prompt or f"Generate a {intent}.",
+                user_prompt=prompt_with_context,
                 max_tokens=max_tokens,
             )
         except (LLMError, LLMJSONError) as exc:

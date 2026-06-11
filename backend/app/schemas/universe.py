@@ -13,6 +13,7 @@ class UniverseGenerateRequest(BaseModel):
 class UniverseUpdate(BaseModel):
     name: str | None = None
     overview: str | None = None
+    prompt: str | None = None
     status: str | None = None
     genre: str | None = None
     style: str | None = None
@@ -147,6 +148,11 @@ class ExpandStoryRequest(BaseModel):
     prompt: str = ""
 
 
+class ExpandLoreRequest(BaseModel):
+    prompt: str = ""
+    focus: str = "all"
+
+
 class CouncilDebateRequest(BaseModel):
     topic: str
     context: str = ""
@@ -169,3 +175,12 @@ class GenreSuggestResponse(BaseModel):
     genre: str
     reasoning: str
     alternatives: list[str] = Field(default_factory=list)
+
+
+class TagsSuggestResponse(BaseModel):
+    genre: str
+    style: str
+    audience: str
+    genre_alternatives: list[str] = Field(default_factory=list)
+    style_alternatives: list[str] = Field(default_factory=list)
+    reasoning: str = ""

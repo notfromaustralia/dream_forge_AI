@@ -1,4 +1,5 @@
 import type { ParsedContent, ParsedQuest, ParsedStory, ParsedDialogue, ParsedPlain } from "./story-parser";
+import type { Faction, Universe } from "./api";
 
 function encodePollinations(prompt: string, seed: string, width: number, height: number): string {
   const encoded = encodeURIComponent(prompt.slice(0, 800));
@@ -13,8 +14,66 @@ export function pollinationsBannerUrl(prompt: string, seed: string): string {
   return encodePollinations(prompt, seed, 800, 320);
 }
 
+export function pollinationsEmblemUrl(prompt: string, seed: string): string {
+  return encodePollinations(prompt, seed, 256, 256);
+}
+
 export function dicebearAvatarUrl(seed: string): string {
   return `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(seed)}&backgroundColor=0a0a1a`;
+}
+
+export function universeBannerPrompt(universe: Pick<Universe, "prompt" | "genre" | "style" | "overview" | "name">): string {
+  const desc = universe.overview || universe.prompt;
+  return [
+    "cinematic wide landscape",
+    universe.genre,
+    universe.style,
+    universe.name,
+    desc.slice(0, 150),
+    "epic atmosphere, dramatic lighting, no text, no watermark",
+  ].filter(Boolean).join(", ");
+}
+
+export function factionEmblemPrompt(faction: Pick<Faction, "name" | "ideology" | "territory" | "power_level">, genre: string): string {
+  return [
+    "heraldic emblem icon",
+    genre,
+    faction.name,
+    faction.ideology.slice(0, 80),
+    faction.territory,
+    `${faction.power_level} power`,
+    "symbolic crest, centered, dark fantasy, no text",
+  ].filter(Boolean).join(", ");
+}
+
+export function factionBannerPrompt(faction: Pick<Faction, "name" | "ideology" | "territory">, genre: string): string {
+  return [
+    "cinematic wide shot",
+    genre,
+    faction.name,
+    faction.ideology.slice(0, 100),
+    `territory: ${faction.territory}`,
+    "atmospheric, political drama, no text",
+  ].filter(Boolean).join(", ");
+}
+
+export function eraScenePrompt(
+  eraYear: number,
+  eraLabel: string,
+  events: { title: string; description?: string }[],
+  genre: string
+): string {
+  const eventHint = events[0]
+    ? `${events[0].title}: ${(events[0].description || "").slice(0, 80)}`
+    : eraLabel;
+  return [
+    "futuristic time travel portal scene",
+    genre,
+    `year ${eraYear}`,
+    eraLabel,
+    eventHint,
+    "neon cyan magenta, temporal energy, cinematic, no text",
+  ].filter(Boolean).join(", ");
 }
 
 function questPrompt(parsed: ParsedQuest): string {

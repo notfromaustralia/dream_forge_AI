@@ -2,76 +2,64 @@
 
 import React from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Wand2, Shield, Search } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ScoreRings } from "@/components/universe/ScoreRings";
+import { EntityAtlas } from "@/components/universe/EntityAtlas";
+import { FactionPreview } from "@/components/universe/FactionPreview";
+import { ForgeMorePanel } from "@/components/universe/ForgeMorePanel";
+import { TimelinePulse } from "@/components/universe/TimelinePulse";
+import { UniverseHero } from "@/components/universe/UniverseHero";
+import { Card, CardContent } from "@/components/ui/card";
 import { api } from "@/lib/api";
-import { toast } from "sonner";
 
 export default function OverviewPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = React.use(params);
   const { data: universe } = useQuery({ queryKey: ["universe", id], queryFn: () => api.getUniverse(id) });
-  const { data: scores, refetch } = useQuery({ queryKey: ["scores", id], queryFn: () => api.getScores(id) });
+  const { data: factions } = useQuery({ queryKey: ["factions", id], queryFn: () => api.getFactions(id) });
+  const { data: characters } = useQuery({ queryKey: ["characters", id], queryFn: () => api.getCharacters(id) });
+  const { data: timeline } = useQuery({ queryKey: ["timeline", id], queryFn: () => api.getTimeline(id) });
 
-  const handleValidate = async () => {
-    const result = await api.validate(id) as { passed?: boolean; score?: number };
-    toast.success(`Consistency check: ${result.passed ? "Passed" : "Issues found"} (${result.score ?? 0}%)`);
-    refetch();
-  };
+  const memberCounts = React.useMemo(() => {
+    const counts: Record<string, number> = {};
+    characters?.forEach((c) => {
+      if (c.faction_id) counts[c.faction_id] = (counts[c.faction_id] ?? 0) + 1;
+    });
+    return counts;
+  }, [characters]);
 
-  const handleGenerateCharacter = async () => {
-    await api.generateCharacter(id, "Create an intriguing new character");
-    toast.success("Character generated!");
-  };
+  if (!universe) {
+    return <div className="animate-pulse h-96 rounded-2xl bg-white/5" />;
+  }
 
   return (
     <div className="space-y-8">
-      <Card>
-        <CardHeader>
-          <CardTitle>World Overview</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-white/80 leading-relaxed">{universe?.overview || universe?.prompt}</p>
+      <UniverseHero universe={universe} />
+
+      <Card className="border-white/10 bg-white/[0.02]">
+        <CardContent className="p-6 md:p-8">
+          <h3 className="mb-3 font-[family-name:var(--font-cinzel)] text-lg font-semibold text-white">World Synopsis</h3>
+          <p className="text-white/75 leading-relaxed text-base md:text-lg">
+            {universe.overview || universe.prompt}
+          </p>
         </CardContent>
       </Card>
 
-      {scores && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Evaluation Scores</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ScoreRings scores={scores} />
+      <EntityAtlas universeId={id} counts={universe.entity_counts} />
+
+      <FactionPreview
+        universeId={id}
+        factions={factions ?? []}
+        genre={universe.genre}
+        memberCounts={memberCounts}
+      />
+
+      {timeline && timeline.length > 0 && (
+        <Card className="border-white/10 bg-white/[0.02]">
+          <CardContent className="p-6">
+            <TimelinePulse universeId={id} entries={timeline} />
           </CardContent>
         </Card>
       )}
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardContent className="flex flex-col items-center gap-3 p-6">
-            <Wand2 className="h-8 w-8 text-violet-400" />
-            <p className="font-medium text-white">Generate Character</p>
-            <Button variant="outline" size="sm" onClick={handleGenerateCharacter}>Generate</Button>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="flex flex-col items-center gap-3 p-6">
-            <Shield className="h-8 w-8 text-cyan-400" />
-            <p className="font-medium text-white">Validate Lore</p>
-            <Button variant="outline" size="sm" onClick={handleValidate}>Check</Button>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="flex flex-col items-center gap-3 p-6">
-            <Search className="h-8 w-8 text-emerald-400" />
-            <p className="font-medium text-white">Entity Counts</p>
-            <p className="text-xs text-white/50">
-              {universe?.entity_counts?.characters ?? 0} chars · {universe?.entity_counts?.factions ?? 0} factions
-            </p>
-          </CardContent>
-        </Card>
-      </div>
+      <ForgeMorePanel universeId={id} />
     </div>
   );
 }

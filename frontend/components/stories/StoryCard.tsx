@@ -29,6 +29,8 @@ import { dicebearAvatarUrl, pollinationsBannerUrl, storyBannerPrompt } from "@/l
 type StoryCardProps = {
   story: Story;
   index?: number;
+  expanded?: boolean;
+  hideBanner?: boolean;
 };
 
 function Banner({ story, parsed }: { story: Story; parsed: ParsedContent }) {
@@ -207,8 +209,9 @@ function PlainBody({ parsed }: { parsed: ParsedPlain }) {
   return <p className="text-sm text-white/70 whitespace-pre-wrap">{parsed.text}</p>;
 }
 
-export function StoryCard({ story, index = 0 }: StoryCardProps) {
-  const [expanded, setExpanded] = useState(false);
+export function StoryCard({ story, index = 0, expanded: expandedProp, hideBanner = false }: StoryCardProps) {
+  const [expandedState, setExpandedState] = useState(false);
+  const expanded = expandedProp ?? expandedState;
   const parsed = parseStoryContent(story.title, story.synopsis, story.content_json);
 
   const accent =
@@ -227,12 +230,12 @@ export function StoryCard({ story, index = 0 }: StoryCardProps) {
       transition={{ delay: index * 0.05 }}
     >
       <Card className="overflow-hidden border-white/10 bg-white/5">
-        <Banner story={story} parsed={parsed} />
+        {!hideBanner && <Banner story={story} parsed={parsed} />}
         <CardContent className="p-5">
-          <div className="mb-4 flex items-start justify-between gap-2">
+          <div className={`mb-4 flex items-start justify-between gap-2 ${hideBanner ? "" : ""}`}>
             <div className="flex items-start gap-2">
               <Scroll className={`mt-0.5 h-5 w-5 shrink-0 ${accent}`} />
-              <h3 className="text-lg font-semibold">{parsed.title}</h3>
+              {!hideBanner && <h3 className="text-lg font-semibold">{parsed.title}</h3>}
             </div>
             <div className="flex shrink-0 flex-col items-end gap-1">
               <Badge variant="outline" className={story.arc_type === "side" ? "border-cyan-500/40 text-cyan-300" : ""}>
@@ -247,10 +250,10 @@ export function StoryCard({ story, index = 0 }: StoryCardProps) {
           {parsed.kind === "dialogue" && <DialogueBody parsed={parsed} />}
           {parsed.kind === "plain" && <PlainBody parsed={parsed} />}
 
-          {canExpand && (
+          {canExpand && expandedProp === undefined && (
             <button
               type="button"
-              onClick={() => setExpanded(!expanded)}
+              onClick={() => setExpandedState(!expandedState)}
               className="mt-4 flex items-center gap-1 text-xs text-white/40 hover:text-white/70"
             >
               {expanded ? (

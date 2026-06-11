@@ -1,9 +1,4 @@
-"""LLM-powered suggestions for universe-creation inputs.
-
-Currently surfaces a single helper: pick the genre that best matches a
-free-form world description. Designed so the LLM must pick from a known
-list — keeps the rest of the UI's genre-dependent logic predictable.
-"""
+"""LLM-powered suggestions for universe-creation inputs."""
 
 from __future__ import annotations
 
@@ -15,75 +10,89 @@ from app.services.llm import LLMError, LLMJSONError, LLMService
 logger = logging.getLogger("dreamforge.suggester")
 
 
-def _normalize_genre(picked: Any, allowed: list[str], fallback: str) -> str:
-    if not isinstance(picked, str):
-        return fallback
-    picked_norm = picked.strip().lower()
-    for g in allowed:
-        if g.lower() == picked_norm:
-            return g
-    # Allow partial match so "dark fantasy" inside "dark-fantasy thriller" still resolves.
-    for g in allowed:
-        if g.lower() in picked_norm or picked_norm in g.lower():
-            return g
+def _trim_tag(value: Any, fallback: str) -> str:
+    if isinstance(value, str) and value.strip():
+        return value.strip()[:80]
     return fallback
 
 
-async def suggest_genre(prompt: str, allowed_genres: list[str]) -> dict[str, Any]:
-    """Pick the best-matching genre from `allowed_genres` for a world description.
+def _alt_list(raw: Any, exclude: str) -> list[str]:
+    if not isinstance(raw, list):
+        return []
+    out: list[str] = []
+    for item in raw:
+        tag = _trim_tag(item, "")
+        if tag and tag.lower() != exclude.lower() and tag not in out:
+            out.append(tag)
+    return out[:3]
 
-    Falls back to a neutral default if the LLM is unavailable so the universe
-    creation flow never blocks on this.
-    """
+
+async def suggest_universe_tags(prompt: str) -> dict[str, Any]:
+    """Generate free-form genre, style, and audience tags from a world description."""
+    fallback = {
+        "genre": "dark fantasy",
+        "style": "epic",
+        "audience": "general",
+        "genre_alternatives": ["fantasy", "mythic horror"],
+        "style_alternatives": ["gritty", "whimsical"],
+        "reasoning": "Default tags applied.",
+    }
+
     if not prompt.strip():
-        return {
-            "genre": allowed_genres[0],
-            "reasoning": "No description provided yet.",
-            "alternatives": [],
-        }
+        return {**fallback, "reasoning": "No description provided yet."}
 
-    fallback = allowed_genres[0]
-    genres_csv = ", ".join(allowed_genres)
     system_prompt = (
-        "You are a genre classifier for a worldbuilding tool. "
-        "Pick the SINGLE best-matching genre from the provided list for the user's world description. "
-        "Return ONLY a JSON object with this shape:\n"
-        '{"genre": "<one of the allowed genres>", '
-        '"reasoning": "<one sentence why this genre fits>", '
-        '"alternatives": ["<up to 2 other plausible genres from the list>"]}'
+        "You are a creative director for a worldbuilding tool. "
+        "Given a world description, suggest genre, style, and audience tags. "
+        "Tags should be 2-4 words each, creative and specific — NOT limited to common lists. "
+        "Return ONLY JSON:\n"
+        '{"genre": "<2-4 word genre>", "style": "<2-4 word tone/style>", '
+        '"audience": "<general|young adult|mature|all ages>", '
+        '"genre_alternatives": ["<alt1>", "<alt2>"], '
+        '"style_alternatives": ["<alt1>", "<alt2>"], '
+        '"reasoning": "<one sentence why these fit>"}'
     )
-    user_prompt = (
-        f"Allowed genres: {genres_csv}\n"
-        f"World description:\n{prompt.strip()[:1200]}"
-    )
+    user_prompt = f"World description:\n{prompt.strip()[:1200]}"
 
     try:
         raw = await LLMService().complete_json(
             system_prompt=system_prompt,
             user_prompt=user_prompt,
-            max_tokens=200,
-            temperature=0.2,
+            max_tokens=300,
+            temperature=0.4,
         )
     except (LLMError, LLMJSONError) as exc:
-        logger.warning("suggest_genre LLM call failed: %s", exc)
+        logger.warning("suggest_universe_tags LLM call failed: %s", exc)
         return {
-            "genre": fallback,
-            "reasoning": f"Suggestion unavailable ({exc.__class__.__name__}); defaulted to {fallback}.",
-            "alternatives": [],
+            **fallback,
+            "reasoning": f"Suggestion unavailable ({exc.__class__.__name__}); using defaults.",
         }
 
-    picked = _normalize_genre(raw.get("genre"), allowed_genres, fallback)
+    genre = _trim_tag(raw.get("genre"), fallback["genre"])
+    style = _trim_tag(raw.get("style"), fallback["style"])
+    audience = _trim_tag(raw.get("audience"), fallback["audience"])
     reasoning = raw.get("reasoning") if isinstance(raw.get("reasoning"), str) else ""
 
-    alt_raw = raw.get("alternatives") if isinstance(raw.get("alternatives"), list) else []
-    alternatives: list[str] = []
-    for alt in alt_raw:
-        normalized = _normalize_genre(alt, allowed_genres, "")
-        if normalized and normalized != picked and normalized not in alternatives:
-            alternatives.append(normalized)
-
     return {
-        "genre": picked,
+        "genre": genre,
+        "style": style,
+        "audience": audience,
+        "genre_alternatives": _alt_list(raw.get("genre_alternatives"), genre),
+        "style_alternatives": _alt_list(raw.get("style_alternatives"), style),
         "reasoning": reasoning,
-        "alternatives": alternatives[:2],
+    }
+
+
+async def suggest_genre(prompt: str, allowed_genres: list[str]) -> dict[str, Any]:
+    """Legacy genre classifier — kept for backward compatibility."""
+    tags = await suggest_universe_tags(prompt)
+    genre = tags["genre"]
+    for g in allowed_genres:
+        if g.lower() in genre.lower() or genre.lower() in g.lower():
+            genre = g
+            break
+    return {
+        "genre": genre,
+        "reasoning": tags["reasoning"],
+        "alternatives": tags["genre_alternatives"],
     }
