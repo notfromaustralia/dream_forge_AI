@@ -31,12 +31,15 @@ class CharacterAgent(BaseAgent):
         data = await self.llm.complete_json(
             system_prompt="You are a character creation expert. Generate characters as JSON with a 'characters' array.",
             user_prompt=f"{prompt}. Available factions: {faction_names}. Available locations: {location_names}.",
-            demo_key="characters",
+            demo_key="characters_contemporary" if any(
+                kw in prompt.lower() for kw in ("botswana", "tricycle", "uber", "forager", "gaborone")
+            ) else "characters",
         )
 
         embed_svc = EmbeddingService(self.session)
         graph = GraphEngine(self.session)
         created_ids: list[str] = []
+        created_characters: list[dict] = []
 
         for i, char_data in enumerate(data.get("characters", [])):
             char_id = f"char_{uuid.uuid4().hex[:12]}"
@@ -57,6 +60,17 @@ class CharacterAgent(BaseAgent):
             )
             self.session.add(character)
             created_ids.append(char_id)
+            created_characters.append({
+                "id": char_id,
+                "name": char_data.get("name", "Unknown"),
+                "bio": char_data.get("bio", ""),
+                "motivations": char_data.get("motivations", ""),
+                "personality": char_data.get("personality", {}),
+                "story_importance": char_data.get("story_importance", "supporting"),
+                "era_start": char_data.get("era_start", 0),
+                "faction_id": faction_id,
+                "location_id": location_id,
+            })
             await embed_svc.store_embedding(
                 universe_id, "character", char_id,
                 f"{char_data.get('name')}: {char_data.get('bio', '')} Motivations: {char_data.get('motivations', '')}",
@@ -78,6 +92,7 @@ class CharacterAgent(BaseAgent):
 
         return {
             "character_ids": created_ids,
+            "characters": created_characters,
             "count": len(created_ids),
             "reasoning": self.reasoning_step(
                 f"Generating characters for {universe_id}",

@@ -98,9 +98,23 @@ export interface TimelineState {
   events: { id: string; title: string; year: number }[];
 }
 
+export interface Location {
+  id: string;
+  name: string;
+  location_type: string;
+  description: string;
+  era_start: number;
+  era_end: number | null;
+}
+
 export const api = {
   listUniverses: () => request<{ universes: Universe[]; total: number }>("/universes"),
   getUniverse: (id: string) => request<Universe>(`/universes/${id}`),
+  updateUniverse: (id: string, body: { overview?: string; name?: string; genre?: string }) =>
+    request<Universe>(`/universes/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
   generateUniverse: (body: { prompt: string; genre: string; style: string; audience: string }) =>
     fetch(`${API_URL}/universes/generate`, {
       method: "POST",
@@ -114,6 +128,7 @@ export const api = {
       { method: "POST" }
     ),
   getFactions: (id: string) => request<Faction[]>(`/universes/${id}/factions`),
+  getLocations: (id: string) => request<Location[]>(`/universes/${id}/locations`),
   getEvents: (id: string) => request<Event[]>(`/universes/${id}/events`),
   getStories: (id: string) => request<Story[]>(`/universes/${id}/stories`),
   getGraph: (id: string, eraYear?: number) =>
@@ -129,6 +144,17 @@ export const api = {
     request<unknown>(`/universes/${id}/generate/character`, {
       method: "POST",
       body: JSON.stringify({ prompt }),
+    }),
+  generateLore: (id: string, prompt?: string) =>
+    request<{ overview?: string; created?: Record<string, string[]>; entity_counts?: Universe["entity_counts"] }>(
+      `/universes/${id}/generate/lore`,
+      { method: "POST", body: JSON.stringify({ prompt: prompt ?? "" }) }
+    ),
+  generateWorld: (id: string, body: { prompt?: string; character_prompt?: string; quest_count?: number }) =>
+    fetch(`${API_URL}/universes/${id}/generate/world`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
     }),
   generateQuest: (id: string, prompt: string) =>
     request<unknown>(`/universes/${id}/generate/quest`, {

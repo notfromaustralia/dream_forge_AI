@@ -22,6 +22,10 @@ class NarrativeAgent(BaseAgent):
             "expand_story": "story",
         }
         demo_key = demo_keys.get(intent, "story")
+        if intent == "quest" and any(
+            kw in prompt.lower() for kw in ("botswana", "tricycle", "uber", "forager", "gaborone")
+        ):
+            demo_key = "quest_contemporary"
 
         data = await self.llm.complete_json(
             system_prompt="You are a master storyteller. Generate narrative content as JSON.",

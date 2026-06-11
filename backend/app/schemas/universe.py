@@ -129,6 +129,19 @@ class EvaluationScoresResponse(BaseModel):
     details: dict = Field(default_factory=dict)
 
 
+class GenerateLoreRequest(BaseModel):
+    prompt: str = ""
+    genre: str | None = None
+    detail_level: str = "exhaustive"
+
+
+class GenerateWorldRequest(BaseModel):
+    prompt: str = ""
+    genre: str | None = None
+    character_prompt: str = "Create compelling characters for this world"
+    quest_count: int = 2
+
+
 class GenerateCharacterRequest(BaseModel):
     prompt: str = ""
 

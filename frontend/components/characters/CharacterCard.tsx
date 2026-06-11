@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -17,6 +17,18 @@ type CharacterCardProps = {
 export function CharacterCard({ character, universeId }: CharacterCardProps) {
   const [generating, setGenerating] = useState(false);
   const queryClient = useQueryClient();
+
+  const { data: factions } = useQuery({
+    queryKey: ["factions", universeId],
+    queryFn: () => api.getFactions(universeId),
+  });
+  const { data: locations } = useQuery({
+    queryKey: ["locations", universeId],
+    queryFn: () => api.getLocations(universeId),
+  });
+
+  const factionName = factions?.find((f) => f.id === character.faction_id)?.name;
+  const locationName = locations?.find((l) => l.id === character.location_id)?.name;
 
   const bgPortrait =
     character.portrait_prompt && character.portrait_status === "ready"
@@ -63,11 +75,21 @@ export function CharacterCard({ character, universeId }: CharacterCardProps) {
         </div>
         <CardDescription className="line-clamp-3 text-left">{character.bio}</CardDescription>
       </CardHeader>
-      <CardContent className="relative">
+      <CardContent className="relative space-y-2">
         {character.motivations && (
           <p className="text-xs text-white/50">{character.motivations}</p>
         )}
-        <p className="mt-2 text-xs text-white/30">
+        {(factionName || locationName) && (
+          <div className="flex flex-wrap gap-2">
+            {factionName && (
+              <Badge variant="secondary" className="text-xs">Faction: {factionName}</Badge>
+            )}
+            {locationName && (
+              <Badge variant="outline" className="text-xs">Location: {locationName}</Badge>
+            )}
+          </div>
+        )}
+        <p className="text-xs text-white/30">
           Era: {character.era_start}
           {character.era_end ? `–${character.era_end}` : "+"}
         </p>

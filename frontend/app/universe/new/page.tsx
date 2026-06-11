@@ -10,7 +10,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
 
-const GENRES = ["fantasy", "sci-fi", "cyberpunk", "horror", "solarpunk", "dark fantasy"];
+const GENRES = [
+  "fantasy", "sci-fi", "cyberpunk", "horror", "solarpunk", "dark fantasy",
+  "contemporary realism", "historical fiction", "afrofuturism", "literary fiction", "magical realism",
+];
 const STYLES = ["epic", "gritty", "whimsical", "noir", "mythic"];
 const AUDIENCES = ["general", "young adult", "mature", "all ages"];
 
@@ -47,6 +50,22 @@ export default function CreateUniversePage() {
             }
             if (event.event === "agent_started") {
               setProgress((p) => [...p, `Running ${event.agent_id}...`]);
+            }
+            if (event.event === "agent_complete") {
+              const agent = event.agent_id;
+              const result = event.result ?? {};
+              if (agent === "lore" && result.created) {
+                setProgress((p) => [
+                  ...p,
+                  `Lore: ${result.created.factions?.length ?? 0} factions, ${result.created.locations?.length ?? 0} locations, ${result.created.events?.length ?? 0} events`,
+                ]);
+              } else if (agent === "character") {
+                setProgress((p) => [...p, `Characters: ${result.count ?? 0} created`]);
+              } else if (agent === "narrative") {
+                setProgress((p) => [...p, `Story: ${result.title ?? result.data?.title ?? "created"}`]);
+              } else {
+                setProgress((p) => [...p, `${agent} complete`]);
+              }
             }
             if (event.event === "workflow_complete" && event.universe_id) {
               universeId = event.universe_id;

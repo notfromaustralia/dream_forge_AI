@@ -10,6 +10,7 @@ class PlannerAgent(BaseAgent):
         intent = context.get("intent", "generate_universe")
         steps = {
             "generate_universe": ["lore", "characters", "consistency", "narrative"],
+            "populate_world": ["lore", "characters", "narrative", "narrative", "consistency"],
             "expand_story": ["narrative", "consistency"],
             "generate_character": ["characters", "consistency"],
             "generate_quest": ["narrative", "consistency"],

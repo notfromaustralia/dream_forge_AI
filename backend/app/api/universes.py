@@ -7,7 +7,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agents import CharacterAgent, ConsistencyAgent, NarrativeAgent
+from app.agents import CharacterAgent, ConsistencyAgent, LoreAgent, NarrativeAgent
 from app.auth.dependencies import get_current_user
 from app.db.database import get_db
 from app.db.models import (
@@ -34,7 +34,9 @@ from app.schemas.universe import (
     ExpandStoryRequest,
     GenerateCharacterRequest,
     GenerateDialogueRequest,
+    GenerateLoreRequest,
     GenerateQuestRequest,
+    GenerateWorldRequest,
     GraphEdgeCreate,
     GraphResponse,
     SearchRequest,
@@ -163,7 +165,8 @@ async def update_universe(
         setattr(universe, field, value)
     await db.commit()
     await db.refresh(universe)
-    return _universe_response(universe)
+    counts = await _entity_counts(db, universe_id)
+    return _universe_response(universe, counts)
 
 
 @router.delete("/{universe_id}")
@@ -318,6 +321,69 @@ async def recalculate_scores(
     scorer = EvaluationScorer(db)
     scores = await scorer.calculate(universe_id)
     return EvaluationScoresResponse(**scores)
+
+
+@router.post("/{universe_id}/generate/lore")
+async def generate_lore(
+    universe_id: str,
+    body: GenerateLoreRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    universe = await db.get(Universe, universe_id)
+    if not universe or universe.user_id != user.id:
+        raise HTTPException(404, "Universe not found")
+
+    prompt = body.prompt or universe.prompt
+    genre = body.genre or universe.genre
+
+    from app.agents import LoreAgent
+
+    agent = LoreAgent(db)
+    result = await agent.run({
+        "universe_id": universe_id,
+        "prompt": prompt,
+        "genre": genre,
+        "detail_level": body.detail_level,
+    })
+
+    if result.get("overview"):
+        universe.overview = result["overview"]
+        if body.genre:
+            universe.genre = body.genre
+        await db.commit()
+
+    counts = await _entity_counts(db, universe_id)
+    return {**result, "entity_counts": counts.model_dump()}
+
+
+@router.post("/{universe_id}/generate/world")
+async def generate_world(
+    universe_id: str,
+    body: GenerateWorldRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    universe = await db.get(Universe, universe_id)
+    if not universe or universe.user_id != user.id:
+        raise HTTPException(404, "Universe not found")
+
+    async def event_stream():
+        orch = Orchestrator(db)
+        context = {
+            "prompt": body.prompt or universe.prompt,
+            "genre": body.genre or universe.genre,
+            "character_prompt": body.character_prompt,
+            "quest_count": body.quest_count,
+        }
+        async for event in orch.run_populate_world(universe_id, context):
+            universe_obj = await db.get(Universe, universe_id)
+            if universe_obj:
+                universe_obj.status = "active"
+                await db.commit()
+            yield f"data: {json.dumps(event)}\n\n"
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
 @router.post("/{universe_id}/generate/character")

@@ -10,6 +10,8 @@ import {
   Network,
   BookOpen,
   Brain,
+  MapPin,
+  Calendar,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -17,6 +19,8 @@ const NAV = [
   { href: "overview", label: "Overview", icon: LayoutDashboard },
   { href: "characters", label: "Characters", icon: Users },
   { href: "factions", label: "Factions", icon: Swords },
+  { href: "locations", label: "Locations", icon: MapPin },
+  { href: "events", label: "Events", icon: Calendar },
   { href: "timeline", label: "Time Machine", icon: Clock },
   { href: "graph", label: "Graph", icon: Network },
   { href: "stories", label: "Stories", icon: BookOpen },

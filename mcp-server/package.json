@@ -1,16 +1,37 @@
 {
   "name": "dreamforge-mcp",
-  "version": "1.0.0",
+  "version": "1.2.0",
   "type": "module",
+  "description": "MCP server for DreamForge - AI-powered worldbuilding and narrative generation",
   "scripts": {
     "start": "tsx index.ts",
-    "mcp": "tsx index.ts"
+    "dev": "DREAMFORGE_LOG_LEVEL=debug DREAMFORGE_ENABLE_METRICS=true tsx index.ts",
+    "mcp": "tsx index.ts",
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "node test-tools.js",
+    "lint": "eslint . --ext .ts"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.12.1"
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "zod": "^3.22.4",
+    "zod-to-json-schema": "^3.25.2"
   },
   "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@typescript-eslint/eslint-plugin": "^6.13.0",
+    "@typescript-eslint/parser": "^6.13.0",
+    "eslint": "^8.55.0",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0"
-  }
+  },
+  "keywords": [
+    "mcp",
+    "dreamforge",
+    "worldbuilding",
+    "ai",
+    "narrative"
+  ],
+  "author": "DreamForge",
+  "license": "MIT"
 }

@@ -3,145 +3,93 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
   CallToolRequestSchema,
+  GetPromptRequestSchema,
+  ListPromptsRequestSchema,
+  ListResourcesRequestSchema,
   ListToolsRequestSchema,
+  ReadResourceRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-
-const API_URL = process.env.DREAMFORGE_API_URL ?? "http://localhost:8000/api/v1";
-const DEFAULT_UNIVERSE = process.env.DREAMFORGE_UNIVERSE_ID ?? "uni_dark_fantasy";
-
-async function apiCall(path: string, method = "GET", body?: unknown) {
-  const res = await fetch(`${API_URL}${path}`, {
-    method,
-    headers: { "Content-Type": "application/json" },
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`API ${res.status}: ${text}`);
-  }
-  return res.json();
-}
+import { healthCheck } from "./src/api-client.js";
+import { config, logger, metrics } from "./src/config.js";
+import { getPrompt, PROMPTS } from "./src/prompts.js";
+import { listResources, readResource } from "./src/resources.js";
+import { TOOLS } from "./src/tools/definitions.js";
+import { handleToolCall } from "./src/tools/handlers.js";
 
 const server = new Server(
-  { name: "dreamforge", version: "1.0.0" },
-  { capabilities: { tools: {} } }
+  { name: "dreamforge", version: config.version },
+  { capabilities: { tools: {}, prompts: {}, resources: {} } }
 );
 
-server.setRequestHandler(ListToolsRequestSchema, async () => ({
-  tools: [
-    {
-      name: "create_character",
-      description: "Create a new character in a DreamForge universe with AI-generated bio, motivations, and relationships.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          universe_id: { type: "string", description: "Universe ID (default: demo dark fantasy)" },
-          prompt: { type: "string", description: "Character creation prompt" },
-        },
-      },
-    },
-    {
-      name: "generate_quest",
-      description: "Generate a lore-consistent side quest for a DreamForge universe, optionally involving a faction.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          universe_id: { type: "string", description: "Universe ID" },
-          prompt: { type: "string", description: "Quest description or requirements" },
-          faction_name: { type: "string", description: "Faction to involve (e.g. Shadow Guild)" },
-        },
-      },
-    },
-    {
-      name: "get_world_context",
-      description: "Get condensed lore context for a universe including characters, factions, locations, and events.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          universe_id: { type: "string", description: "Universe ID" },
-        },
-      },
-    },
-    {
-      name: "search_lore",
-      description: "Search universe lore using hybrid graph and semantic search.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          universe_id: { type: "string", description: "Universe ID" },
-          query: { type: "string", description: "Natural language search query" },
-        },
-        required: ["query"],
-      },
-    },
-    {
-      name: "create_dialogue",
-      description: "Generate character dialogue for a scene in a universe.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          universe_id: { type: "string", description: "Universe ID" },
-          character_ids: { type: "array", items: { type: "string" }, description: "Character IDs" },
-          scene: { type: "string", description: "Scene description" },
-        },
-        required: ["scene"],
-      },
-    },
-  ],
-}));
+server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }));
 
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
-  const universeId = (args?.universe_id as string) ?? DEFAULT_UNIVERSE;
+  const startTime = Date.now();
+  return handleToolCall(
+    name,
+    args as Record<string, unknown> | undefined,
+    startTime
+  ) as ReturnType<typeof handleToolCall>;
+});
 
-  try {
-    let result: unknown;
+server.setRequestHandler(ListPromptsRequestSchema, async () => ({
+  prompts: PROMPTS,
+}));
 
-    switch (name) {
-      case "create_character":
-        result = await apiCall(`/universes/${universeId}/generate/character`, "POST", {
-          prompt: args?.prompt ?? "Create an interesting character",
-        });
-        break;
-      case "generate_quest":
-        result = await apiCall(`/universes/${universeId}/generate/quest`, "POST", {
-          prompt: args?.prompt ?? "",
-          faction_name: args?.faction_name,
-        });
-        break;
-      case "get_world_context":
-        result = await apiCall(`/universes/${universeId}/context`);
-        break;
-      case "search_lore":
-        result = await apiCall(`/universes/${universeId}/search`, "POST", {
-          query: args?.query,
-          limit: 10,
-        });
-        break;
-      case "create_dialogue":
-        result = await apiCall(`/universes/${universeId}/generate/dialogue`, "POST", {
-          character_ids: args?.character_ids ?? [],
-          scene: args?.scene ?? "A tense confrontation",
-        });
-        break;
-      default:
-        throw new Error(`Unknown tool: ${name}`);
-    }
+server.setRequestHandler(GetPromptRequestSchema, async (request) => {
+  const { name, arguments: args } = request.params;
+  return getPrompt(name, args as Record<string, string> | undefined);
+});
 
-    return {
-      content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-    };
-  } catch (err) {
-    return {
-      content: [{ type: "text", text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
-      isError: true,
-    };
+server.setRequestHandler(ListResourcesRequestSchema, async () => ({
+  resources: listResources(),
+}));
+
+server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
+  const { uri } = request.params;
+  return readResource(uri);
+});
+
+process.on("SIGINT", async () => {
+  logger.info("Shutting down gracefully...");
+  if (config.enableMetrics) {
+    logger.info("Final metrics:", metrics.getStats());
   }
+  await server.close();
+  process.exit(0);
+});
+
+process.on("uncaughtException", (error) => {
+  logger.error("Uncaught exception:", error);
+  process.exit(1);
 });
 
 async function main() {
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
+  try {
+    logger.info("Starting DreamForge MCP Server...");
+    logger.info(`API URL: ${config.apiUrl}`);
+    logger.info(`Default universe: ${config.defaultUniverse}`);
+    logger.info(`Log level: ${config.logLevel}`);
+    logger.info(`Tools: ${TOOLS.length} | Prompts: ${PROMPTS.length} | Resources: ${listResources().length}`);
+
+    if (process.env.DREAMFORGE_TEST_CONNECTION === "true") {
+      logger.info("Testing API connectivity...");
+      await healthCheck();
+      logger.info("API connection successful");
+    }
+
+    const transport = new StdioServerTransport();
+    await server.connect(transport);
+
+    logger.info("DreamForge MCP Server ready");
+  } catch (error) {
+    logger.error("Failed to start server:", error);
+    process.exit(1);
+  }
 }
 
-main().catch(console.error);
+main().catch((error) => {
+  console.error("Fatal error:", error);
+  process.exit(1);
+});
