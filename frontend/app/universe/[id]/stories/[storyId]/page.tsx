@@ -8,7 +8,9 @@ import { Badge } from "@/components/ui/badge";
 import { EntityBanner } from "@/components/ui/EntityBanner";
 import { StoryCard } from "@/components/stories/StoryCard";
 import { api } from "@/lib/api";
+import { StoryNarratorFab } from "@/components/stories/StoryNarratorFab";
 import { parseStoryContent } from "@/lib/story-parser";
+import { buildNarrationScript } from "@/lib/story-narration";
 import { toVisualContext } from "@/lib/visual-prompts";
 
 const ARC_COLORS: Record<string, string> = {
@@ -35,6 +37,7 @@ export default function StoryDetailPage({
 
   const visualContext = toVisualContext(universe);
   const parsed = parseStoryContent(story.title, story.synopsis, story.content_json);
+  const narrationScript = buildNarrationScript(parsed);
   const arcLabel = story.arc_type === "side" ? "Side Quest" : story.arc_type === "scene" ? "Scene" : "Main Arc";
 
   return (
@@ -68,6 +71,8 @@ export default function StoryDetailPage({
       </div>
 
       <StoryCard story={story} visualContext={visualContext} expanded hideBanner />
+
+      <StoryNarratorFab text={narrationScript} storyId={storyId} />
     </div>
   );
 }
