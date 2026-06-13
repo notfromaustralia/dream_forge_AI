@@ -25,9 +25,11 @@
 
 **Hackathon judges — start here** for a full product walkthrough.
 
-[![Watch the DreamForge demo on YouTube](https://img.shields.io/badge/YouTube-Watch%20Demo%20Video-red?style=for-the-badge&logo=youtube)](https://youtu.be/REPLACE_WITH_VIDEO_ID)
+[![Watch the DreamForge demo on YouTube](https://img.youtube.com/vi/WSNM_yASWiE/maxresdefault.jpg)](https://youtu.be/WSNM_yASWiE)
 
-> **Update the link above** with your published YouTube URL before submitting to Devpost.
+[![Watch the DreamForge demo on YouTube](https://img.shields.io/badge/YouTube-Watch%20Demo%20Video-red?style=for-the-badge&logo=youtube)](https://youtu.be/WSNM_yASWiE)
+
+**Direct link:** [https://youtu.be/WSNM_yASWiE](https://youtu.be/WSNM_yASWiE)
 
 ---
 
