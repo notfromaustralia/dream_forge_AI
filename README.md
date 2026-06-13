@@ -4,6 +4,49 @@
 
 > Notion for storytelling + Figma for worldbuilding + GitHub Copilot for creativity.
 
+## Table of Contents
+
+| | |
+|---|---|
+| **[Demo Video](#demo-video)** | 5-minute walkthrough (YouTube) |
+| **[Architecture Diagram](#architecture-diagram)** | How Copilot, MCP, and the platform connect |
+| **[Sequence Diagram](#sequence-diagram-copilot-quest-flow)** | End-to-end quest generation flow |
+| [Features](#features) | Core capabilities |
+| [Tech Stack](#tech-stack) | Technologies used |
+| [Quick Start](#quick-start) | Run locally or with Docker |
+| [Demo Data](#demo-data) | Seeded universes and entities |
+| [Environment](#environment) | Configuration variables |
+| [API](#api) | Key REST endpoints |
+| [License](#license) | MIT |
+
+---
+
+## Demo Video
+
+**Hackathon judges — start here** for a full product walkthrough.
+
+[![Watch the DreamForge demo on YouTube](https://img.shields.io/badge/YouTube-Watch%20Demo%20Video-red?style=for-the-badge&logo=youtube)](https://youtu.be/REPLACE_WITH_VIDEO_ID)
+
+> **Update the link above** with your published YouTube URL before submitting to Devpost.
+
+---
+
+## Architecture Diagram
+
+How **GitHub Copilot**, the **MCP server**, the **DreamForge platform**, and **Microsoft IQ alignment patterns** fit together:
+
+![DreamForge architecture — data flow between GitHub Copilot, MCP server, FastAPI, multi-agent orchestration, PostgreSQL, and IQ patterns](docs/Dataflow.png)
+
+---
+
+## Sequence Diagram (Copilot Quest Flow)
+
+What happens when a user asks Copilot to create a lore-consistent quest — from chat through MCP, FastAPI, agents, and back to the web app:
+
+![DreamForge sequence diagram — Copilot quest generation from get_world_context through generate_quest to the Stories page](docs/System%20Diagram.png)
+
+---
+
 ## Features
 
 - **Universe Generation Engine** — History, geography, factions, magic systems from a single prompt
